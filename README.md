@@ -121,3 +121,4 @@ Capability states use `available`, `connected`, `unavailable`, `simulated`, `req
 ### Production boundary
 
 The current state store, development credentials, rate limits, and audit records remain Worker-isolate-local. Before production use with real personal data, replace them with durable encrypted storage, verified identity, durable distributed rate limiting, credential rotation/recovery, and provider-side OAuth. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
+Cloudflare deployment connected 
