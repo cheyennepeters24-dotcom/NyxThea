@@ -1,0 +1,1 @@
+export function classifyComplexity(message) { const words = message.trim().split(/\s+/).filter(Boolean).length; const research = /\b(research|compare|verify|evidence|sources?|analyze)\b/i.test(message); const score = words + (research ? 20 : 0); return { level: score >= 28 ? "deliberate" : "lightweight", score, budgetMs: score >= 28 ? 8000 : 2500 }; }

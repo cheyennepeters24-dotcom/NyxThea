@@ -1,0 +1,107 @@
+import { getCapabilities } from "./src/capabilities/capabilities.js";
+import { describeDistributedSystem } from "./src/architecture/distributed.js";
+import { registerEndpoint, removeEndpoint, trustedEndpointSignal, topology } from "./src/architecture/endpoints.js";
+import { recordPresenceSignal, currentPresence } from "./src/architecture/presence.js";
+import { saveEmergencyPolicy, recordEmergencyEvidence, evaluateSavedEmergency } from "./src/architecture/emergency.js";
+import { assessWakeContext, transitionVoice, voiceState } from "./src/architecture/voice.js";
+import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
+import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
+import { requireProfileAccess } from "./src/privacy/authorization.js";
+import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
+import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
+import { orchestrate } from "./src/core/orchestration.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
+import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, readJson, securityHeaders } from "./src/security.js";
+import { captureWorldFact, worldFacts, worldSummary, changedSince } from "./src/models/world-model.js";
+import { configurePerson, personModel, publicPerson, updatePreference } from "./src/models/person-model.js";
+import { detectContext, protectIntent } from "./src/intelligence/context-engine.js";
+import { assessImportance, compareTradeoffs } from "./src/intelligence/importance.js";
+import { prepareAction, authorizeAction, actionStatus, verifyAction } from "./src/intelligence/action-engine.js";
+import { addHouseholdItem, householdCommandCenter, predictRunout, catchUp } from "./src/intelligence/household.js";
+import { educationGuidance } from "./src/intelligence/education.js";
+import { createGoal, updateGoal, startExperiment, measureExperiment, rememberDecision, lifeDesignStatus } from "./src/intelligence/life-design.js";
+import { prepareMusicCommand } from "./src/intelligence/music.js";
+import { permissionDecision } from "./src/intelligence/permissions.js";
+import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
+import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
+const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }) });
+function identity(request) { return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
+function own(request, action) { const profile = identity(request); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
+function requireAdmin(profile) { if (!profile.permissions.includes("household_admin")) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
+async function api(request, env, url) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
+  if (request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
+  const profile = own(request, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id);
+  if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/profiles") { if (!profile.permissions.includes("household_admin")) return json({ error: "Household administrator permission is required." }, 403); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
+  if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: "temporary local-development credential" }); }
+  if (request.method === "GET" && url.pathname === "/api/capabilities") return json({ capabilities: getCapabilities({ aiConnected: Boolean(env.AI), integrations: integrationStatus(profile.id) }) });
+  if (request.method === "POST" && url.pathname === "/api/world/facts") return json({ fact: captureWorldFact(profile.id, await readJson(request)) }, 201);
+  if (request.method === "GET" && url.pathname === "/api/world/facts") return json({ facts: worldFacts(profile.id, { entityType: url.searchParams.get("type") || undefined, includeStale: url.searchParams.get("stale") === "true" }), summary: worldSummary(profile.id) });
+  if (request.method === "GET" && url.pathname === "/api/world/changes") return json({ changes: changedSince(profile.id, url.searchParams.get("since")) });
+  if (request.method === "POST" && url.pathname === "/api/person") return json({ person: configurePerson(profile, await readJson(request)) });
+  if (request.method === "POST" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/person")) { requireAdmin(profile); const target = profileById(url.pathname.split("/")[3]); if (!target) return json({ error: "Profile not found." }, 404); return json({ person: configurePerson(target, await readJson(request), { allowRole: true }) }); }
+  if (request.method === "GET" && url.pathname === "/api/person") return json({ person: publicPerson(personModel(profile.id)) });
+  if (request.method === "POST" && url.pathname === "/api/person/preferences") return json(updatePreference(profile.id, await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/intelligence/context") { const input = await readJson(request); const context = detectContext(input.message || "", input.context); return json({ context, intent: protectIntent(input.message || "", context) }); }
+  if (request.method === "POST" && url.pathname === "/api/intelligence/importance") return json(assessImportance(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/intelligence/tradeoffs") return json({ options: compareTradeoffs((await readJson(request)).options) });
+  if (request.method === "POST" && url.pathname === "/api/permissions/check") { const input = await readJson(request); return json(permissionDecision(profile, input.action, input)); }
+  if (request.method === "GET" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/records")) { const targetProfileId = url.pathname.split("/")[3]; const domain = url.searchParams.get("domain"); const protectedDomain = { pet: "pet_care", vehicle: "vehicle_information", wellness: "health_wellness" }[domain]; requireProfileAccess({ requester: profile, targetProfileId, domain: protectedDomain }); return json({ records: listRecords(targetProfileId, domain) }); }
+  if (request.method === "POST" && url.pathname === "/api/profiles/grants") { const input = await readJson(request); if (input.from !== profile.id) return json({ error: "A profile may grant only its own protected data." }, 403); return json({ grant: grantAccess(input) }, 201); }
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1)) });
+  if (request.method === "GET" && url.pathname === "/api/endpoints") return json({ topology: topology(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/endpoints") { requireAdmin(profile); return json({ endpoint: registerEndpoint({ ...(await readJson(request)), ownerProfileId: profile.id }) }, 201); }
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/endpoints/")) return json({ deleted: removeEndpoint(profile.id, url.pathname.split("/").at(-1)) });
+  if (request.method === "POST" && url.pathname === "/api/presence/signals") { const input = await readJson(request); const signal = trustedEndpointSignal(profile.id, input); return json({ signal: recordPresenceSignal(profile.id, { ...signal, state: input.state }), assessment: currentPresence(profile.id) }, 201); }
+  if (request.method === "GET" && url.pathname === "/api/presence") return json(currentPresence(profile.id));
+  if (request.method === "POST" && url.pathname === "/api/emergency/policies") { requireAdmin(profile); return json({ policy: saveEmergencyPolicy(profile.id, await readJson(request)) }, 201); }
+  if (request.method === "POST" && url.pathname === "/api/emergency/evidence") return json({ evidence: recordEmergencyEvidence(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && url.pathname.startsWith("/api/emergency/evaluate/")) return json(evaluateSavedEmergency(profile.id, url.pathname.split("/").at(-1)));
+  if (request.method === "GET" && url.pathname === "/api/integrations") return json({ integrations: integrationStatus(profile.id), notice: "No external provider is connected." });
+  if (request.method === "POST" && url.pathname === "/api/integrations") { requireAdmin(profile); const { kind, permissions } = await readJson(request); return json({ integration: requestConnection(profile.id, kind, permissions) }, 201); }
+  if (request.method === "POST" && url.pathname.startsWith("/api/integrations/authorize/")) return json({ integration: authorizeConnection(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).permissions) });
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/integrations/")) return json({ revoked: revokeConnection(profile.id, url.pathname.split("/").at(-1)) });
+  if (request.method === "GET" && url.pathname === "/api/integrations/audit") return json({ audit: integrationAudit(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/consents") return json({ consent: grantConsent(profile.id, await readJson(request)) }, 201);
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/consents/")) return json({ revoked: revokeConsent(profile.id, url.pathname.split("/").at(-1)) });
+  if (request.method === "POST" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const input = await readJson(request); if (domain === "wellness") requireProfileAccess({ requester: profile, targetProfileId: profile.id, domain: "health_wellness", consentId: input.consentId, consentDomain: "wellness" }); return json({ record: createRecord(profile.id, domain, input.type, input.data) }, 201); }
+  if (request.method === "GET" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const records = listRecords(profile.id, domain); return json({ records, explanations: domain === "vehicle" ? records.map(vehicleExplanation) : [] }); }
+  if (request.method === "POST" && url.pathname === "/api/learning/observations") return json({ observation: recordObservation(profile.id, (await readJson(request)).observation) }, 201);
+  if (request.method === "POST" && url.pathname === "/api/learning/proposals") { const input = await readJson(request); return json({ proposal: proposeLearningChange({ profileId: profile.id, observationId: input.observationId, proposedChange: input.proposedChange, authorized: profile.permissions.includes("household_admin") }) }, 201); }
+  if (request.method === "POST" && url.pathname.startsWith("/api/learning/test/")) return json({ proposal: testProposal(profile.id, url.pathname.split("/").at(-1), await readJson(request)) });
+  if (request.method === "GET" && url.pathname === "/api/learning") return json(learningStatus(profile.id));
+  if (request.method === "POST" && url.pathname === "/api/opportunities/evaluate") return json(await evaluateOpportunity(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/actions") return json({ action: prepareAction(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && url.pathname.startsWith("/api/actions/authorize/")) return json({ action: authorizeAction(profile, url.pathname.split("/").at(-1), await readJson(request)) });
+  if (request.method === "POST" && url.pathname.startsWith("/api/actions/verify/")) return json({ action: verifyAction(profile.id, url.pathname.split("/").at(-1), await readJson(request)) });
+  if (request.method === "GET" && url.pathname === "/api/actions") return json({ actions: actionStatus(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/household") return json({ item: addHouseholdItem(profile.id, await readJson(request)) }, 201);
+  if (request.method === "GET" && url.pathname === "/api/household/command-center") return json(householdCommandCenter(profile.id));
+  if (request.method === "POST" && url.pathname.startsWith("/api/household/runout/")) return json(predictRunout(profile.id, url.pathname.split("/").at(-1), await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/household/catch-up") return json({ changes: catchUp(profile.id, url.searchParams.get("since")) });
+  if (request.method === "POST" && url.pathname === "/api/education/help") return json(educationGuidance(profile, (await readJson(request)).message || ""));
+  if (request.method === "POST" && url.pathname === "/api/goals") return json({ goal: createGoal(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && url.pathname.startsWith("/api/goals/")) return json({ goal: updateGoal(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).completedSteps) });
+  if (request.method === "POST" && url.pathname === "/api/experiments") return json({ experiment: startExperiment(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && url.pathname.startsWith("/api/experiments/")) return json({ experiment: measureExperiment(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).value) });
+  if (request.method === "POST" && url.pathname === "/api/decisions") return json({ decision: rememberDecision(profile.id, await readJson(request)) }, 201);
+  if (request.method === "GET" && url.pathname === "/api/life-design") return json(lifeDesignStatus(profile.id));
+  if (request.method === "POST" && url.pathname === "/api/music/command") return json(prepareMusicCommand(profile.id, await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/vehicle/crash-assessment") return json(assessCrash((await readJson(request)).signals));
+  if (request.method === "POST" && url.pathname === "/api/vehicle/mode") return json(vehicleMode(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const input = await readJson(request); const allowed = ["i_need_help","i_cannot_speak","home_emergency","intruder","medical","fire_smoke"]; if (!allowed.includes(input.type) || input.confirm !== true) return json({ error: "A recognized silent emergency type and explicit confirmation are required." }, 400); return json({ state: "possible_emergency", mode: "silent", type: input.type, action: "proposal_only", audio: "remain_quiet", next: "evaluate_configured_protocol_and_trusted_evidence" }, 202); }
+  if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
+  if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/voice/nicknames") return json({ profile: profileSummary(setWakeNicknames(profile, (await readJson(request)).nicknames)) });
+  if (request.method === "POST" && url.pathname === "/api/voice/wake") { const result = assessWakeContext({ ...(await readJson(request)), authorizedNicknames: profile.wakeNicknames || [] }); if (result.safeToRespond) transitionVoice(profile.id, "wake"); return json({ ...result, session: voiceState(profile.id) }); }
+  if (request.method === "POST" && url.pathname === "/api/voice/state") return json({ session: transitionVoice(profile.id, (await readJson(request)).event) });
+  if (request.method === "GET" && url.pathname === "/api/memories") return json({ memories: memory.inspect(url.searchParams.get("layer") || undefined), layers: memory.layers, retention: memory.retention, notice: memory.storageNotice });
+  if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/memories/")) return json({ deleted: memory.forget(url.pathname.split("/").at(-1)) });
+  if (request.method === "DELETE" && url.pathname === "/api/memories") return json({ deleted: memory.clear(url.searchParams.get("layer") || undefined) });
+  if (request.method === "POST" && url.pathname === "/api/conversation/state") return json({ state: setConversationState(profile.id, (await readJson(request)).mode) });
+  if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
+  return json({ error: "Not found." }, 404);
+}
+export default { async fetch(request, env) { const url = new URL(request.url); try { if (url.pathname.startsWith("/api/")) return await api(request, env, url); const asset = await env.ASSETS.fetch(request); const headers = new Headers(asset.headers); for (const [key, value] of Object.entries(securityHeaders())) headers.set(key, value); return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }); } catch (error) { return json({ error: error instanceof Error ? error.message : "Something went wrong." }, Number.isInteger(error?.status) ? error.status : 500); } } };

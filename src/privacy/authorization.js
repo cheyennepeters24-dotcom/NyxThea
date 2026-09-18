@@ -1,0 +1,3 @@
+import { mayAccessProfile } from "../profiles/profiles.js";
+import { activeConsent } from "../domains/records.js";
+export function requireProfileAccess({ requester, targetProfileId, domain, permission = "read", consentId, consentDomain }) { if (!mayAccessProfile({ requesterProfileId: requester.id, targetProfileId, domain, permission })) throw Object.assign(new Error("This protected profile domain has not been shared with you."), { status: 403 }); if (consentDomain && !activeConsent(targetProfileId, consentId, consentDomain)) throw Object.assign(new Error("Active consent is required for this operation."), { status: 403 }); return true; }

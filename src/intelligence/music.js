@@ -1,0 +1,3 @@
+export const musicProviders=["spotify","apple_music","youtube_music","amazon_music","other_supported"];
+export const musicCommands=["play","pause","skip","replay","volume","playlist","mood","add_to_playlist","similar","do_not_play_again","room_route","playback_scope"];
+export function prepareMusicCommand(profileId,{provider,command,parameters={}}){if(!musicProviders.includes(provider)||!musicCommands.includes(command))throw Object.assign(new Error("A supported music provider and command are required."),{status:400});return{profileId,provider,command,parameters,state:"not_configured",executed:false,message:`${provider} is not connected. Connect an authorized official provider before this command can run.`};}
