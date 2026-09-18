@@ -1,0 +1,1 @@
+export function buildContext({ memories = [], research = [], conversation = [] } = {}) { return { memories: memories.map(({ id, text, layer, createdAt }) => ({ id, text, layer, createdAt })), research: research.map(({ title, extract, url }) => ({ title, extract, url })), conversation: conversation.map(({ role, text, at }) => ({ role, text, at })) }; }

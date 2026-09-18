@@ -1,0 +1,1 @@
+{"name":"nyxthea","private":true,"type":"module","scripts":{"test":"node --test src/tests/*.test.js","check":"node --check _worker.js"}}
