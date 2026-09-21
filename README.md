@@ -13,7 +13,7 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 
 ## Responsive interface system
 
-Nyxthea's permanent visual direction is the **Sapphire Glass Command Center**: luminous sapphire and silver light, strong contrast, elegant glass panels, and a refined futuristic feel. The Home view uses the blue rose as a living animated centerpiece; other views use it as a compact identity emblem.
+Nyxthea's permanent visual direction is the **Sapphire Glass Command Center**: luminous sapphire and silver light, strong contrast, elegant glass panels, and a refined futuristic feel. A deep celestial galaxy spans the full interface behind readable dark glass. The Home view uses a water-free blue rose as a breathing centerpiece with independent rotating celestial rings, glowing orbs, and orbiting light points; other views use the rose as a compact identity emblem.
 
 The interface is built from real responsive controls rather than a fixed reference image or invisible hotspots. Desktop uses a full command-center sidebar, tablets reflow the content grid, and phones use touch-sized controls with persistent bottom navigation. All interfaces connect to the same Nyxthea core and preserve capability honesty.
 
