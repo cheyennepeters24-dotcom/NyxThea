@@ -11,6 +11,12 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 - Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories.
 - A polished browser interface and an API for status, capabilities, chat, and memory.
 
+## Responsive interface system
+
+Nyxthea's permanent visual direction is the **Sapphire Glass Command Center**: luminous sapphire and silver light, strong contrast, elegant glass panels, and a refined futuristic feel. The Home view uses the blue rose as a living animated centerpiece; other views use it as a compact identity emblem.
+
+The interface is built from real responsive controls rather than a fixed reference image or invisible hotspots. Desktop uses a full command-center sidebar, tablets reflow the content grid, and phones use touch-sized controls with persistent bottom navigation. All interfaces connect to the same Nyxthea core and preserve capability honesty.
+
 > **Memory storage notice:** this foundation's memory adapter is isolate-local and temporary. It deliberately does not present temporary storage as durable memory. Connect a user-approved durable storage service before relying on it across Worker restarts.
 
 ## Local core and external boundaries
@@ -121,4 +127,4 @@ Capability states use `available`, `connected`, `unavailable`, `simulated`, `req
 ### Production boundary
 
 The current state store, development credentials, rate limits, and audit records remain Worker-isolate-local. Before production use with real personal data, replace them with durable encrypted storage, verified identity, durable distributed rate limiting, credential rotation/recovery, and provider-side OAuth. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
-Cloudflare deployment connected 
+Cloudflare deployment connected
