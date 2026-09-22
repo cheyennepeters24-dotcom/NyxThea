@@ -3,8 +3,13 @@ main = "_worker.js"
 compatibility_date = "2026-09-18"
 assets = { directory = "./public", binding = "ASSETS" }
 
-# Bind the account's Nyxthea D1 database as NYXTHEA_DB in Cloudflare.
-# Its database ID is account-specific and is intentionally not hard-coded here.
+[[durable_objects.bindings]]
+name = "NYXTHEA_STATE"
+class_name = "NyxtheaState"
+
+[exports.NyxtheaState]
+type = "durable-object"
+storage = "sqlite"
 
 [ai]
 binding = "AI"
