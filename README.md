@@ -10,6 +10,7 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 - Public research using Wikimedia/Wikipedia, with only returned Wikipedia pages shown as sources.
 - Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories. The `NYXTHEA_STATE` binding persists memories and identity-control records across Worker restarts.
 - A polished browser interface and an API for status, capabilities, chat, and memory.
+- **Live Guide Mode:** with explicit session permission, the browser can share a camera view, screen, and optional microphone transcript so Nyxthea can inspect the current state, provide one reversible step, and verify the result before continuing. Raw media is not written to Nyxthea storage.
 
 ## Responsive interface system
 
@@ -73,6 +74,7 @@ There is no anonymous owner access. Local development requires the configured bo
 - **Proportional processing:** ordinary conversation takes a lightweight route; research takes the deliberate research and verification route.
 - **Layered, user-controlled memory:** `short_term`, `personal`, `long_term`, `patterns`, and `archive` are explicit memory layers persisted by the SQLite-backed `NYXTHEA_STATE` Durable Object.
 - **Privacy guardrails:** no external source, profile, or integration is silently activated. Until a durable authentication adapter exists, profiles use isolate-local credentials and protected-domain grants.
+- **Session-only visual guidance:** Live Guide requests browser-level permission, displays an active-viewing indicator, limits visual checks to 12 per minute, expires after 30 minutes, and shuts down media tracks when the session closes. High-risk electrical, gas, weapon, medical-emergency, and under-vehicle coaching is blocked.
 
 ### Designed and ready for future authorized connections
 
