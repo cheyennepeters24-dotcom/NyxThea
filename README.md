@@ -8,7 +8,7 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 
 - Text conversation through Cloudflare Workers AI using `@cf/google/gemma-4-26b-a4b-it` when the `AI` binding is configured.
 - Public research using Wikimedia/Wikipedia, with only returned Wikipedia pages shown as sources.
-- Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories.
+- Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories. With the `NYXTHEA_DB` binding configured, memories and identity-control records persist across Worker restarts.
 - A polished browser interface and an API for status, capabilities, chat, and memory.
 
 ## Responsive interface system
@@ -17,7 +17,7 @@ Nyxthea's permanent visual direction is the **Sapphire Glass Command Center**: l
 
 The interface is built from real responsive controls rather than a fixed reference image or invisible hotspots. Desktop uses a full command-center sidebar, tablets reflow the content grid, and phones use touch-sized controls with persistent bottom navigation. All interfaces connect to the same Nyxthea core and preserve capability honesty.
 
-> **Memory storage notice:** this foundation's memory adapter is isolate-local and temporary. It deliberately does not present temporary storage as durable memory. Connect a user-approved durable storage service before relying on it across Worker restarts.
+> **Storage notice:** the Worker uses Cloudflare D1 when the `NYXTHEA_DB` binding is present. Profiles, scoped memories, permissions/grants, person settings/preferences, and access-audit records then persist across Worker restarts. Without that binding, the API truthfully reports temporary isolate-local storage.
 
 ## Local core and external boundaries
 
@@ -47,7 +47,8 @@ src/privacy/privacy.js             Privacy primitives and policy summary
 
 1. Install and authenticate the Cloudflare Wrangler CLI.
 2. From this directory, run `npx wrangler deploy`.
-3. Ensure your Cloudflare account has Workers AI access. The Worker uses the `AI` binding declared in `wrangler.toml`; static assets are served from `./public` through `ASSETS`.
+3. Create or select the Nyxthea D1 database, apply `migrations/0001_durable_state.sql`, and bind it to the Worker as `NYXTHEA_DB`.
+4. Ensure your Cloudflare account has Workers AI access. The Worker uses the `AI` binding declared in `wrangler.toml`; static assets are served from `./public` through `ASSETS`.
 
 For local development, run `npx wrangler dev` and open the displayed local address.
 
@@ -70,7 +71,7 @@ There is no anonymous owner access. Local development requires the configured bo
 - **Capability honesty:** every registry item has a concrete state: `available`, `connected`, `unavailable`, `simulated`, `requires_authorization`, `not_configured`, `degraded`, or `revoked`.
 - **Core reasoning record:** each chat request records the bounded path **Understand → Research → Compare → Verify → Explain → Act**. The Act stage is blocked unless an authorized active integration exists.
 - **Proportional processing:** ordinary conversation takes a lightweight route; research takes the deliberate research and verification route.
-- **Layered, user-controlled memory:** `short_term`, `personal`, `long_term`, `patterns`, and `archive` are explicit memory layers. All currently remain isolate-local and temporary.
+- **Layered, user-controlled memory:** `short_term`, `personal`, `long_term`, `patterns`, and `archive` are explicit memory layers. They persist in D1 when `NYXTHEA_DB` is bound and remain truthfully labeled temporary without it.
 - **Privacy guardrails:** no external source, profile, or integration is silently activated. Until a durable authentication adapter exists, profiles use isolate-local credentials and protected-domain grants.
 
 ### Designed and ready for future authorized connections
