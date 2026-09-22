@@ -10,7 +10,7 @@ import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
 import { orchestrate } from "./src/core/orchestration.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
-import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, readJson, securityHeaders } from "./src/security.js";
+import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, MAX_MEDIA_JSON_BYTES, readJson, securityHeaders } from "./src/security.js";
 import { captureWorldFact, worldFacts, worldSummary, changedSince } from "./src/models/world-model.js";
 import { configurePerson, personModel, publicPerson, updatePreference } from "./src/models/person-model.js";
 import { detectContext, protectIntent } from "./src/intelligence/context-engine.js";
@@ -24,6 +24,7 @@ import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
+import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }) });
 function identity(request) { return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 function own(request, action) { const profile = identity(request); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
@@ -91,6 +92,10 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/music/command") return json(prepareMusicCommand(profile.id, await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/vehicle/crash-assessment") return json(assessCrash((await readJson(request)).signals));
   if (request.method === "POST" && url.pathname === "/api/vehicle/mode") return json(vehicleMode(await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/live-guide") return json({ sessions: liveGuideSessions(profile.id), visionAvailable: Boolean(env.AI), mediaRetention: "Raw camera, screen, and microphone data is not stored by Nyxthea." });
+  if (request.method === "POST" && url.pathname === "/api/live-guide") return json({ session: startLiveGuide(profile.id, await readJson(request), { visionAvailable: Boolean(env.AI) }) }, 201);
+  if (request.method === "POST" && /^\/api\/live-guide\/[^/]+\/analyze$/.test(url.pathname)) { enforceRateLimit(`${profile.id}:live-guide-analysis`, { limit: 12, windowMs: 60000 }); const sessionId = url.pathname.split("/")[3]; return json(await analyzeLiveGuide(profile.id, sessionId, await readJson(request, MAX_MEDIA_JSON_BYTES), { ai: env.AI })); }
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/live-guide/")) return json({ session: stopLiveGuide(profile.id, url.pathname.split("/")[3]) });
   if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const input = await readJson(request); const allowed = ["i_need_help","i_cannot_speak","home_emergency","intruder","medical","fire_smoke"]; if (!allowed.includes(input.type) || input.confirm !== true) return json({ error: "A recognized silent emergency type and explicit confirmation are required." }, 400); return json({ state: "possible_emergency", mode: "silent", type: input.type, action: "proposal_only", audio: "remain_quiet", next: "evaluate_configured_protocol_and_trusted_evidence" }, 202); }
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
