@@ -1,4 +1,4 @@
-/** In-isolate working state. Selected tables are hydrated from and flushed to D1 per API request. */
+/** In-isolate working state. Selected tables are hydrated from and flushed to Durable Object storage per API request. */
 const tables = new Map();
 export function table(name) { if (!tables.has(name)) tables.set(name, new Map()); return tables.get(name); }
 export function id(prefix) { return `${prefix}_${crypto.randomUUID()}`; }
