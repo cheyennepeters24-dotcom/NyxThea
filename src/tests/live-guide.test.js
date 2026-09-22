@@ -23,6 +23,21 @@ test("Live Guide blocks high-risk visual coaching before AI runs", async () => {
   assert.equal(calls, 0);
 });
 
+test("child profiles can verify chores while homework stays guided", async () => {
+  const chore = startLiveGuide("child", { objective: "Check whether I finished putting away my toys", sources: ["camera"], confirm: true }, { visionAvailable: true, profileRole: "child" });
+  assert.equal(chore.status, "active");
+  assert.equal(chore.audience, "child");
+  assert.equal(chore.guidanceMode, "child_safe");
+
+  const homework = startLiveGuide("child", { objective: "Check my homework answers", sources: ["camera"], confirm: true }, { visionAvailable: true, profileRole: "child" });
+  const ai = { run: async () => ({ response: JSON.stringify({ mode: "guided_learning", observation: "Question 3 needs another look.", nextStep: "The correct answer is 42.", verification: "Try the item again.", caution: "", confidence: "high", risk: "normal" }) }) };
+  const result = await analyzeLiveGuide("child", homework.id, { image: "data:image/jpeg;base64,YQ==" }, { ai });
+  assert.equal(result.session.guidanceMode, "guided_learning");
+  assert.match(result.guidance.observation, /Question 3/);
+  assert.doesNotMatch(result.guidance.nextStep, /42|correct answer/i);
+  assert.match(result.guidance.caution, /will not provide or correct/);
+});
+
 test("Live Guide returns one bounded visual step without retaining raw media", async () => {
   const session = startLiveGuide("owner", { objective: "Reconnect the printer paper tray", sources: ["camera", "microphone"], confirm: true }, { visionAvailable: true });
   let request;
