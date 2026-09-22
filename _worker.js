@@ -2,7 +2,7 @@ import { getCapabilities } from "./src/capabilities/capabilities.js";
 import { describeDistributedSystem } from "./src/architecture/distributed.js";
 import { registerEndpoint, removeEndpoint, trustedEndpointSignal, topology } from "./src/architecture/endpoints.js";
 import { recordPresenceSignal, currentPresence } from "./src/architecture/presence.js";
-import { saveEmergencyPolicy, recordEmergencyEvidence, evaluateSavedEmergency } from "./src/architecture/emergency.js";
+import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
 import { assessWakeContext, transitionVoice, voiceState } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
 import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
@@ -60,6 +60,10 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/emergency/policies") { requireAdmin(profile); return json({ policy: saveEmergencyPolicy(profile.id, await readJson(request)) }, 201); }
   if (request.method === "POST" && url.pathname === "/api/emergency/evidence") return json({ evidence: recordEmergencyEvidence(profile.id, await readJson(request)) }, 201);
   if (request.method === "POST" && url.pathname.startsWith("/api/emergency/evaluate/")) return json(evaluateSavedEmergency(profile.id, url.pathname.split("/").at(-1)));
+  if (request.method === "GET" && url.pathname === "/api/emergency/incidents") return json({ incidents: basicEmergencyIncidents(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/emergency/incidents") return json({ incident: startBasicEmergency(profile.id, await readJson(request)), action: "proposal_only", audio: "remain_quiet" }, 202);
+  if (request.method === "POST" && /^\/api\/emergency\/incidents\/[^/]+\/location$/.test(url.pathname)) return json({ incident: recordBasicEmergencyLocation(profile.id, url.pathname.split("/")[4], await readJson(request)) });
+  if (request.method === "POST" && /^\/api\/emergency\/incidents\/[^/]+\/mark-safe$/.test(url.pathname)) return json({ incident: markBasicEmergencySafe(profile.id, url.pathname.split("/")[4], await readJson(request)) });
   if (request.method === "GET" && url.pathname === "/api/integrations") return json({ integrations: integrationStatus(profile.id), notice: "No external provider is connected." });
   if (request.method === "POST" && url.pathname === "/api/integrations") { requireAdmin(profile); const { kind, permissions } = await readJson(request); return json({ integration: requestConnection(profile.id, kind, permissions) }, 201); }
   if (request.method === "POST" && url.pathname.startsWith("/api/integrations/authorize/")) return json({ integration: authorizeConnection(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).permissions) });
@@ -96,7 +100,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/live-guide") return json({ session: startLiveGuide(profile.id, await readJson(request), { visionAvailable: Boolean(env.AI), profileRole: profile.role || (profile.permissions.includes("household_admin") ? "adult" : "unspecified") }) }, 201);
   if (request.method === "POST" && /^\/api\/live-guide\/[^/]+\/analyze$/.test(url.pathname)) { enforceRateLimit(`${profile.id}:live-guide-analysis`, { limit: 12, windowMs: 60000 }); const sessionId = url.pathname.split("/")[3]; return json(await analyzeLiveGuide(profile.id, sessionId, await readJson(request, MAX_MEDIA_JSON_BYTES), { ai: env.AI })); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/live-guide/")) return json({ session: stopLiveGuide(profile.id, url.pathname.split("/")[3]) });
-  if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const input = await readJson(request); const allowed = ["i_need_help","i_cannot_speak","home_emergency","intruder","medical","fire_smoke"]; if (!allowed.includes(input.type) || input.confirm !== true) return json({ error: "A recognized silent emergency type and explicit confirmation are required." }, 400); return json({ state: "possible_emergency", mode: "silent", type: input.type, action: "proposal_only", audio: "remain_quiet", next: "evaluate_configured_protocol_and_trusted_evidence" }, 202); }
+  if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const incident = startBasicEmergency(profile.id, await readJson(request)); return json({ ...incident, incident, action: "proposal_only", audio: "remain_quiet", next: "use_native_emergency_call_or_one_time_location_if_needed" }, 202); }
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/voice/nicknames") return json({ profile: profileSummary(setWakeNicknames(profile, (await readJson(request)).nicknames)) });

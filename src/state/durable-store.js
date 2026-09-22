@@ -1,6 +1,6 @@
 import { replaceTable, snapshotTable } from "./store.js";
 
-export const durableTables = ["profiles", "profile_grants", "access_audit", "memories", "person_models"];
+export const durableTables = ["profiles", "profile_grants", "access_audit", "memories", "person_models", "emergency_policies", "emergency_incidents"];
 const prefix = "nyxthea-state:";
 const recordPrefix = (collection) => `${prefix}${collection}:`;
 const recordKey = (collection, key) => `${recordPrefix(collection)}${encodeURIComponent(key)}`;

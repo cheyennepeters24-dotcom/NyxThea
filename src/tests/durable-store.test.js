@@ -20,6 +20,8 @@ test("Durable Object storage restores profiles, permissions, settings, audit rec
   table("profile_grants").set("grant_1", { id: "grant_1", from: "owner", to: "child", domain: "preferences", active: true });
   table("person_models").set("owner", { profileId: "owner", preferences: { theme: "sapphire" } });
   table("access_audit").set("access_1", { id: "access_1", profileId: "owner", action: "POST /api/memories" });
+  table("emergency_policies").set("policy_1", { id: "policy_1", profileId: "owner", enabled: true });
+  table("emergency_incidents").set("incident_1", { id: "incident_1", profileId: "owner", status: "active" });
   remember("local-user:owner", "Keep the celestial rose interface", "long_term");
   await persistDurableState(storage, before);
 
@@ -29,6 +31,8 @@ test("Durable Object storage restores profiles, permissions, settings, audit rec
   assert.equal(table("profile_grants").get("grant_1").active, true);
   assert.equal(table("person_models").get("owner").preferences.theme, "sapphire");
   assert.equal(table("access_audit").get("access_1").action, "POST /api/memories");
+  assert.equal(table("emergency_policies").get("policy_1").enabled, true);
+  assert.equal(table("emergency_incidents").get("incident_1").status, "active");
   assert.equal(inspect("local-user:owner")[0].text, "Keep the celestial rose interface");
   forget("local-user:owner", inspect("local-user:owner")[0].id);
   await persistDurableState(storage, before);

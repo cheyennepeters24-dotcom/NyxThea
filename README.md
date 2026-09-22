@@ -11,6 +11,7 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 - Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories. The `NYXTHEA_STATE` binding persists memories and identity-control records across Worker restarts.
 - A polished browser interface and an API for status, capabilities, chat, and memory.
 - **Live Guide Mode:** with explicit session permission, the browser can share a camera view, screen, and optional microphone transcript so Nyxthea can inspect the current state, provide one reversible step, and verify the result before continuing. Child profiles can use it for chores, routines, and guided learning; for schoolwork, Nyxthea may identify what needs another look and offer a concept or hint, but cannot provide or correct answers. Raw media is not written to Nyxthea storage.
+- **Basic Emergency Mode:** an always-visible, silent-capable screen can hand off to the phone's native 911 dialer, save a deliberately confirmed profile-scoped incident, optionally save one browser location snapshot, show a status timeline, and provide a separate practice mode. Nyxthea does not claim a call was placed or that anyone was notified.
 
 ## Responsive interface system
 
@@ -89,7 +90,7 @@ The modules in `src/architecture`, `src/profiles`, and `src/integrations` establ
 - a permanent female Nyxthea voice identity with wake words (`Nyxthea`, `Nyx`, `Nixie`), authorized nicknames, interruption handling, and confidence thresholds that keep the system quiet when uncertain; and
 - bounded adaptation through `listen → remember → analyze → adapt → test → measure → improve`, with privacy, authorization, safety, and capability honesty protected from self-modification.
 
-None of these connections, hardware inputs, voice services, emergency contacts, health sources, or actions are active in this foundation.
+None of these connections, hardware inputs, voice services, emergency contacts, health sources, or external actions are active in this foundation. Basic Emergency Mode does not automatically contact emergency services or trusted adults, record audio/video, or track location in the background. Its call control is a user-initiated handoff to the device dialer.
 
 ## Expanded API
 
@@ -129,5 +130,5 @@ Capability states use `available`, `connected`, `unavailable`, `simulated`, `req
 
 ### Production boundary
 
-Profiles, permissions/grants, person settings/preferences, access-audit records, and scoped memories persist in Cloudflare Durable Object SQLite storage. Development credentials and rate limits still require verified identity, distributed enforcement, and credential rotation/recovery before production use with real personal data. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
+Profiles, permissions/grants, person settings/preferences, access-audit records, scoped memories, emergency policies, and basic emergency incidents persist in Cloudflare Durable Object SQLite storage. Development credentials and rate limits still require verified identity, distributed enforcement, and credential rotation/recovery before production use with real personal data. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
 Cloudflare deployment connected
