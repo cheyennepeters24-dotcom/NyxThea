@@ -8,7 +8,7 @@ Nyxthea is a Cloudflare Worker foundation for a personal intelligence layer—no
 
 - Text conversation through Cloudflare Workers AI using `@cf/google/gemma-4-26b-a4b-it` when the `AI` binding is configured.
 - Public research using Wikimedia/Wikipedia, with only returned Wikipedia pages shown as sources.
-- Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories. With the `NYXTHEA_DB` binding configured, memories and identity-control records persist across Worker restarts.
+- Explicit memory controls: save, list, retrieve for conversation context, remove individual memories, and remove all memories. The `NYXTHEA_STATE` binding persists memories and identity-control records across Worker restarts.
 - A polished browser interface and an API for status, capabilities, chat, and memory.
 
 ## Responsive interface system
@@ -17,7 +17,7 @@ Nyxthea's permanent visual direction is the **Sapphire Glass Command Center**: l
 
 The interface is built from real responsive controls rather than a fixed reference image or invisible hotspots. Desktop uses a full command-center sidebar, tablets reflow the content grid, and phones use touch-sized controls with persistent bottom navigation. All interfaces connect to the same Nyxthea core and preserve capability honesty.
 
-> **Storage notice:** the Worker uses Cloudflare D1 when the `NYXTHEA_DB` binding is present. Profiles, scoped memories, permissions/grants, person settings/preferences, and access-audit records then persist across Worker restarts. Without that binding, the API truthfully reports temporary isolate-local storage.
+> **Storage notice:** the Worker uses a SQLite-backed Cloudflare Durable Object through the `NYXTHEA_STATE` binding. Profiles, scoped memories, permissions/grants, person settings/preferences, and access-audit records persist across Worker restarts without a separately provisioned database or account-specific ID.
 
 ## Local core and external boundaries
 
@@ -47,7 +47,7 @@ src/privacy/privacy.js             Privacy primitives and policy summary
 
 1. Install and authenticate the Cloudflare Wrangler CLI.
 2. From this directory, run `npx wrangler deploy`.
-3. Create or select the Nyxthea D1 database, apply `migrations/0001_durable_state.sql`, and bind it to the Worker as `NYXTHEA_DB`.
+3. Deploying `wrangler.toml` provisions the SQLite-backed `NyxtheaState` Durable Object and exposes it as `NYXTHEA_STATE`; no dashboard-created database or copied database ID is required.
 4. Ensure your Cloudflare account has Workers AI access. The Worker uses the `AI` binding declared in `wrangler.toml`; static assets are served from `./public` through `ASSETS`.
 
 For local development, run `npx wrangler dev` and open the displayed local address.
@@ -71,7 +71,7 @@ There is no anonymous owner access. Local development requires the configured bo
 - **Capability honesty:** every registry item has a concrete state: `available`, `connected`, `unavailable`, `simulated`, `requires_authorization`, `not_configured`, `degraded`, or `revoked`.
 - **Core reasoning record:** each chat request records the bounded path **Understand → Research → Compare → Verify → Explain → Act**. The Act stage is blocked unless an authorized active integration exists.
 - **Proportional processing:** ordinary conversation takes a lightweight route; research takes the deliberate research and verification route.
-- **Layered, user-controlled memory:** `short_term`, `personal`, `long_term`, `patterns`, and `archive` are explicit memory layers. They persist in D1 when `NYXTHEA_DB` is bound and remain truthfully labeled temporary without it.
+- **Layered, user-controlled memory:** `short_term`, `personal`, `long_term`, `patterns`, and `archive` are explicit memory layers persisted by the SQLite-backed `NYXTHEA_STATE` Durable Object.
 - **Privacy guardrails:** no external source, profile, or integration is silently activated. Until a durable authentication adapter exists, profiles use isolate-local credentials and protected-domain grants.
 
 ### Designed and ready for future authorized connections
@@ -99,7 +99,7 @@ None of these connections, hardware inputs, voice services, emergency contacts, 
 
 ## Functional local foundation
 
-This Worker now includes isolate-local, testable registries and APIs for profiles and profile credentials, protected-domain grants, endpoint topology, presence signals, emergency policies/evidence, pet/vehicle/wellness records, revocable manual consent records, integration authorization requests and audit records, voice-session state, wake confidence, conversation continuity, bounded learning proposals/tests, and research-backed business opportunity evaluation. These records are **temporary Worker-isolate state**, not durable cloud data.
+This Worker now includes testable registries and APIs for profiles and profile credentials, protected-domain grants, endpoint topology, presence signals, emergency policies/evidence, pet/vehicle/wellness records, revocable manual consent records, integration authorization requests and audit records, voice-session state, wake confidence, conversation continuity, bounded learning proposals/tests, and research-backed business opportunity evaluation. Profiles, permissions/grants, person settings/preferences, access-audit records, and scoped memories are durable; the remaining operational records are still temporary Worker-isolate state.
 
 External providers remain disconnected: there is no hardware access, OAuth provider, TTS/STT provider, emergency dispatch, health-data source, vehicle telemetry source, pet-system source, or third-party account connection. An integration authorization record is not an external connection and never activates provider actions.
 
@@ -127,5 +127,5 @@ Capability states use `available`, `connected`, `unavailable`, `simulated`, `req
 
 ### Production boundary
 
-The current state store, development credentials, rate limits, and audit records remain Worker-isolate-local. Before production use with real personal data, replace them with durable encrypted storage, verified identity, durable distributed rate limiting, credential rotation/recovery, and provider-side OAuth. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
+Profiles, permissions/grants, person settings/preferences, access-audit records, and scoped memories persist in Cloudflare Durable Object SQLite storage. Development credentials and rate limits still require verified identity, distributed enforcement, and credential rotation/recovery before production use with real personal data. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
 Cloudflare deployment connected
