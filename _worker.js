@@ -3,7 +3,7 @@ import { describeDistributedSystem } from "./src/architecture/distributed.js";
 import { registerEndpoint, removeEndpoint, trustedEndpointSignal, topology } from "./src/architecture/endpoints.js";
 import { recordPresenceSignal, currentPresence } from "./src/architecture/presence.js";
 import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
-import { assessWakeContext, transitionVoice, voiceState } from "./src/architecture/voice.js";
+import { assessWakeContext, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
 import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
@@ -123,6 +123,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const incident = startBasicEmergency(profile.id, await readJson(request)); return json({ ...incident, incident, action: "proposal_only", audio: "remain_quiet", next: "use_native_emergency_call_or_one_time_location_if_needed" }, 202); }
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
   if (request.method === "POST" && url.pathname === "/api/voice/nicknames") return json({ profile: profileSummary(setWakeNicknames(profile, (await readJson(request)).nicknames)) });
   if (request.method === "POST" && url.pathname === "/api/voice/wake") { const result = assessWakeContext({ ...(await readJson(request)), authorizedNicknames: profile.wakeNicknames || [] }); if (result.safeToRespond) transitionVoice(profile.id, "wake"); return json({ ...result, session: voiceState(profile.id) }); }
   if (request.method === "POST" && url.pathname === "/api/voice/state") return json({ session: transitionVoice(profile.id, (await readJson(request)).event) });
