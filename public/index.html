@@ -132,7 +132,7 @@ async function accountSettings(){
  $("#signOut").onclick=signOut;
 }
 function state(s,label){const prior=document.body.dataset.nyxState;rose.classList.toggle("listening",s==="listening");rose.classList.toggle("speaking",s==="speaking");mic.classList.toggle("listening",s==="listening");$("#roseStatus").lastElementChild.textContent=label||"Ready when you are";if(s!==prior){document.body.dataset.nyxState=s==="ready"?"idle":s;if(s==="listening")NYXSound.cue("listening");else if(s==="thinking")NYXSound.cue("thinking");}}async function speak(text){if(NYXExperience.settings?.voiceEnabled===false)return false;const name=NYXExperience.settings?.preferredName,phonetic=NYXExperience.settings?.pronunciation;let spoken=String(text||"");if(name&&phonetic)spoken=spoken.replaceAll(name,phonetic);return window.NYXVoice?await NYXVoice.say(spoken):false;}
-async function send(m=input.value.trim(),{voiceTurn=false,fastVoice=false}={}){if(!m)return;if(!credential){unlock();return}input.value="";if(NYXHandsFree.active)NYXHandsFree.pause();if(!voiceTurn)panel("Nyxthea",`<div class="msg user">${esc(m)}</div><div class="msg assistant" id="reply">Thinking…</div>`);state("thinking","Thinking");let answer="";const attempts=voiceTurn||fastVoice?1:2;for(let attempt=0;attempt<attempts&&!answer;attempt++){try{const d=await api("/api/chat",{method:"POST",body:JSON.stringify({message:m})});answer=String(d.answer||"").trim();if(!voiceTurn&&d.degraded&&attempt+1<attempts){answer="";await nyxDelay(120)}}catch{if(attempt+1<attempts)await nyxDelay(120)}}if(!answer)answer="I hit a snag. Ask me that again.";if(!voiceTurn){const reply=$("#reply");if(reply)reply.textContent=answer}const spoken=await speak(answer);if(!spoken)NYXHandsFree.resume()}$("#send").onclick=()=>send();input.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();send()}};$$(".quick button[data-prefix]").forEach(b=>b.onclick=()=>{input.value=b.dataset.prefix;input.focus()});
+async function send(m=input.value.trim(),{voiceTurn=false,fastVoice=false}={}){if(!m)return;if(!credential){unlock();return}input.value="";if(NYXHandsFree.active)NYXHandsFree.pause();if(!voiceTurn)panel("Nyxthea",`<div class="msg user">${esc(m)}</div><div class="msg assistant" id="reply">Thinking…</div>`);state("thinking","Thinking");let answer="";const attempts=voiceTurn||fastVoice?1:2;for(let attempt=0;attempt<attempts&&!answer;attempt++){try{const d=await api(voiceTurn?"/api/voice/chat":"/api/chat",{method:"POST",body:JSON.stringify({message:m})});answer=String(d.answer||"").trim();if(!voiceTurn&&d.degraded&&attempt+1<attempts){answer="";await nyxDelay(120)}}catch{if(attempt+1<attempts)await nyxDelay(120)}}if(!answer)answer="I hit a snag. Ask me that again.";if(!voiceTurn){const reply=$("#reply");if(reply)reply.textContent=answer}const spoken=await speak(answer);if(!spoken)NYXHandsFree.resume()}$("#send").onclick=()=>send();input.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();send()}};$$(".quick button[data-prefix]").forEach(b=>b.onclick=()=>{input.value=b.dataset.prefix;input.focus()});
 function toggleVoice(){if(!credential){unlock();return}if(NYXExperience.settings?.voiceEnabled===false){state("ready","Voice is disabled in your profile");return}NYXHandsFree.stop();NYXVoice.toggle(t=>{const spoken=String(t||"").trim();if(spoken)send(spoken,{voiceTurn:true})})}mic.onclick=toggleVoice;
 async function memories(){if(!credential){unlock();return}try{let d=await api("/api/memories"),list=d.memories.length?d.memories.map(x=>`<div class="item">${esc(x.text)}</div>`).join(""):'<div class="item">Nothing is saved yet.</div>';panel("Your memory",`<p>${esc(d.notice||"Memory remains under your control.")}</p>${list}<input id="memText" class="field" placeholder="Save something you choose"><button id="saveMem" class="primary">Remember</button>`);$("#saveMem").onclick=async()=>{let text=$("#memText").value.trim();if(text){await api("/api/memories",{method:"POST",body:JSON.stringify({text})});memories()}}}catch(e){panel("Your memory",`<p>${esc(e.message)}</p>`)}}$("#memory").onclick=memories;
 const emergencyLabels={i_need_help:"I need help",i_cannot_speak:"I cannot speak",medical:"Medical",fire_smoke:"Fire or smoke",intruder:"Intruder",home_emergency:"Home emergency",vehicle_crash:"Vehicle crash",lost_or_unsafe:"Lost or unsafe"};
@@ -233,6 +233,8 @@ const NYXHandsFree={
  },
  async open(){
    if(!this.active||this.paused||document.hidden||this.stream||this.recorder||this.recognition)return;
+   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+   if(SR){this.openSpeechFallback();return}
    if(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder){
      try{
        const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
@@ -243,7 +245,7 @@ const NYXHandsFree={
        if(e?.name==="NotAllowedError"){this.label("Microphone permission is needed for Hey Nyx");return}
      }
    }
-   this.openSpeechFallback()
+   this.label("Wake listening is unavailable in this browser")
  },
  recordChunk(){
    if(!this.active||this.paused||!this.stream||this.recorder||document.hidden)return;
@@ -283,11 +285,19 @@ const NYXHandsFree={
    if(!this.active||this.paused||this.recognition||document.hidden)return;
    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
    if(!SR){this.label("Wake listening is unavailable in this browser");return}
-   const token=this.generation,r=new SR;this.recognition=r;r.lang="en-US";r.continuous=false;r.interimResults=false;r.maxAlternatives=1;
-   r.onresult=e=>{if(!this.active||token!==this.generation)return;const heard=e.results?.[0]?.[0],spoken=heard?.transcript?.trim();if(spoken)this.heard(spoken,heard.confidence)};
+   const token=this.generation,r=new SR;this.recognition=r;r.lang="en-US";r.continuous=true;r.interimResults=false;r.maxAlternatives=3;
+   r.onstart=()=>{this.failures=0;this.label("Listening for Hey Nyx")};
+   r.onresult=e=>{
+     if(!this.active||this.paused||token!==this.generation)return;
+     for(let i=e.resultIndex||0;i<e.results.length;i++){
+       const result=e.results[i];if(result?.isFinal===false)continue;
+       const heard=result?.[0],spoken=heard?.transcript?.trim();
+       if(spoken){void this.heard(spoken,heard.confidence);break}
+     }
+   };
    r.onerror=e=>{if(!this.active||token!==this.generation||["aborted","no-speech"].includes(e.error))return;this.failures++};
-   r.onend=()=>{if(this.recognition===r)this.recognition=null;if(this.active&&!this.paused&&token===this.generation)setTimeout(()=>this.openSpeechFallback(),300)};
-   try{r.start()}catch{this.recognition=null}
+   r.onend=()=>{if(this.recognition===r)this.recognition=null;if(this.active&&!this.paused&&token===this.generation)setTimeout(()=>this.openSpeechFallback(),120)};
+   try{r.start()}catch{this.recognition=null;if(this.active&&!this.paused)setTimeout(()=>this.open(),180)}
  },
  async heard(spoken,confidence){
    if(!this.active)return;
