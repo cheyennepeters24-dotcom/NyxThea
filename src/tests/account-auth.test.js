@@ -34,6 +34,9 @@ test('registration creates a persistent private session without an owner claim',
   resetStateForTests(); object = new NyxtheaState({ storage }, env);
   assert.equal((await body(await call('/api/auth/session', { cookie }))).profile.id, info.profile.id);
   assert.equal((await body(await call('/api/experience', { cookie }))).settings.pronunciation, 'shy-ANN');
+  assert.equal((await call('/api/experience', { method: 'POST', cookie, data: { handsFreeEnabled: true } })).status, 200);
+  resetStateForTests(); object = new NyxtheaState({ storage }, env);
+  assert.equal((await body(await call('/api/experience', { cookie }))).settings.handsFreeEnabled, true);
   const wrong = await call('/api/auth/login', { method: 'POST', data: { username: 'cheyenne', password: 'wrong-password' } });
   assert.equal(wrong.status, 401);
   const login = await call('/api/auth/login', { method: 'POST', data: { username: 'cheyenne', password: 'a-long-test-password-123' } });
