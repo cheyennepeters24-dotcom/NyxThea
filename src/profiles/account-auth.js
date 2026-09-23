@@ -3,6 +3,7 @@ import { createProfile, profileById, profileSummary } from './profiles.js';
 
 const accounts = () => table('auth_accounts');
 const sessions = () => table('auth_sessions');
+const claims = () => table('profile_claim_invites');
 const encoder = new TextEncoder();
 const cookieName = 'nyxthea_session';
 const day = 86400;
@@ -30,6 +31,27 @@ export async function registerAccount({ username, password, displayName }) {
   const profile = createProfile({ displayName: display });
   const recoveryCode = random();
   accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, recoveryHash: await digest(recoveryCode), createdAt: now() });
+  return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
+}
+export async function createProfileClaimInvite(profileId, createdBy, ttlMs = 7 * 86400000) {
+  if (!profileById(profileId)) failure('Profile is unavailable.', 404);
+  if ([...accounts().values()].some(account => account.profileId === profileId)) failure('That profile already has a sign-in.', 409);
+  const code = random();
+  claims().set(await digest(code), { profileId, createdBy, createdAt: now(), expiresAt: Date.now() + ttlMs, usedAt: null });
+  return code;
+}
+export async function claimProfileAccount({ inviteCode, username, password }) {
+  const name = validUsername(username); validPassword(password);
+  if (accounts().has(name)) failure('That username is unavailable.', 409);
+  const key = await digest(String(inviteCode || ''));
+  const invite = claims().get(key);
+  if (!invite || invite.usedAt || invite.expiresAt <= Date.now()) failure('That household invite is invalid or expired.', 401);
+  const profile = profileById(invite.profileId);
+  if (!profile) failure('Profile is unavailable.', 404);
+  if ([...accounts().values()].some(account => account.profileId === profile.id)) failure('That profile already has a sign-in.', 409);
+  const salt = random(), passwordHash = await derive(password, salt), recoveryCode = random();
+  accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, recoveryHash: await digest(recoveryCode), createdAt: now() });
+  invite.usedAt = now(); claims().set(key, invite);
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
 }
 export async function loginAccount({ username, password }) {
