@@ -5,7 +5,7 @@ import { recordPresenceSignal, currentPresence } from "./src/architecture/presen
 import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
-import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
+import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";\nimport { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
@@ -81,6 +81,39 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (profile.permissions.includes("household_admin") ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
+  if (request.method === "GET" && url.pathname === "/api/household/identity") return json({ identity: profileIdentity(profile.id), household: householdSummary(profile.id), devices: devicesFor(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/household/identity") {
+    const input = await readJson(request);
+    const identityRecord = saveProfileIdentity(profile, input);
+    const experiencePatch = {};
+    if (input.preferredName !== undefined) experiencePatch.preferredName = input.preferredName;
+    if (input.pronunciation !== undefined) experiencePatch.pronunciation = input.pronunciation;
+    const settings = Object.keys(experiencePatch).length ? updateExperience(profile.id, experiencePatch) : experienceSettings(profile.id);
+    return json({ identity: identityRecord, household: householdSummary(profile.id), settings });
+  }
+  if (request.method === "POST" && url.pathname === "/api/household/meet") {
+    const input = await readJson(request);
+    if (!input.displayName?.trim()) return json({ error: "Tell me the new person's name first." }, 400);
+    const created = createProfile({ displayName: input.displayName });
+    saveProfileIdentity(created, { preferredName: input.displayName, pronunciation: input.pronunciation, birthday: input.birthday, birthdayMonthDay: input.birthdayMonthDay });
+    const household = addPersonToHousehold(profile, created, { relationshipToRequester: input.relationshipToRequester, relationshipLabel: input.relationshipLabel });
+    return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household }, 201);
+  }
+  if (request.method === "POST" && url.pathname === "/api/household/relationship") {
+    const input = await readJson(request);
+    const household = householdSummary(profile.id);
+    if (!household.members.some(member => member.profileId === input.toProfileId)) return json({ error: "That person is not in this household." }, 404);
+    return json({ relationship: setRelationship(profile.id, input.toProfileId, input.type, { label: input.label }), household: householdSummary(profile.id) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/devices/register") {
+    const input = await readJson(request);
+    return json({ device: registerDevice(profile.id, { ...input, userAgent: request.headers.get("user-agent") || input.userAgent }) }, 201);
+  }
+  if (request.method === "GET" && url.pathname === "/api/devices") return json({ devices: devicesFor(profile.id) });
+  if (request.method === "POST" && /^\\/api\\/devices\\/[^/]+\\/trust$/.test(url.pathname)) {
+    const input = await readJson(request);
+    return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
+  }
   if (request.method === "POST" && url.pathname === "/api/profiles") { if (!profile.permissions.includes("household_admin")) return json({ error: "Household administrator permission is required." }, 403); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
   if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: env.NYXTHEA_STATE ? "password account and server session" : "temporary local-development credential" }); }
   if (request.method === "GET" && url.pathname === "/api/capabilities") return json({ capabilities: getCapabilities({ aiConnected: Boolean(env.AI), integrations: integrationStatus(profile.id) }) });
@@ -154,12 +187,9 @@ async function api(request, env, url) {
     if (!env.AI) return json({ error: "Voice transcription is unavailable right now." }, 503);
     const { audio, type } = await readJson(request, MAX_MEDIA_JSON_BYTES);
     if (typeof audio !== "string" || audio.length < 100 || audio.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio) || !["audio/mp4", "audio/webm", "audio/wav", "audio/ogg", "audio/mpeg", "audio/x-m4a"].includes(type)) return json({ error: "Please record a short audio clip and try again." }, 400);
-    const usage = table("voice_transcription_limits"), day = new Date().toISOString().slice(0, 10), key = `${profile.id}:${day}`;
-    const count = usage.get(key) || 0, totalKey = `all:${day}`, total = usage.get(totalKey) || 0;
-    if (count >= 30) return json({ error: "The daily voice limit has been reached. Please type your message for now." }, 429);
-    if (total >= 80) return json({ error: "Voice input is resting for today. Please type your message for now." }, 429);
-    usage.set(key, count + 1);
-    usage.set(totalKey, total + 1);
+    // Family Alpha rule: ordinary conversation never hits a daily "come back later" quota.
+    // Keep only burst protection so a runaway client cannot hammer transcription infrastructure.
+    enforceRateLimit(`${profile.id}:voice-transcribe`, { limit: 90, windowMs: 60000 });
     try {
       const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" });
       const text = String(result?.text || "").trim().slice(0, 4000);
