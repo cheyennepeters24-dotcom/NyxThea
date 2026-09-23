@@ -16,6 +16,7 @@ async function derive(password, salt) {
   return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' }, key, 256));
 }
 const random = () => `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`;
+const sixDigitCode=()=>String((crypto.getRandomValues(new Uint32Array(1))[0]%900000)+100000);
 function validUsername(value) { const name = String(value || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9._-]{2,31}$/.test(name)) failure('Username must be 3–32 letters, numbers, dots, dashes, or underscores.'); return name; }
 function validPassword(value) { if (typeof value !== 'string' || value.length < 12 || value.length > 128) failure('Password must be 12–128 characters.'); return value; }
 function cookie(request) { const raw = request.headers.get('cookie') || ''; const pair = raw.split(';').map(x => x.trim()).find(x => x.startsWith(`${cookieName}=`)); return pair?.slice(cookieName.length + 1) || ''; }
@@ -74,7 +75,7 @@ function validEmail(value){
 export async function startRecoveryEmailVerification(profileId,email){
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
   if(!record)failure("Account not found.",404);
-  const value=validEmail(email),code=String(Math.floor(100000+Math.random()*900000));
+  const value=validEmail(email),code=sixDigitCode();
   record.pendingRecoveryEmail=value;record.pendingRecoveryEmailCodeHash=await digest(code);record.pendingRecoveryEmailExpiresAt=Date.now()+10*60*1000;
   return {email:value,code};
 }
@@ -89,7 +90,7 @@ export async function confirmRecoveryEmail(profileId,code){
 export async function startEmailPasswordRecovery(username){
   const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);
   if(!record?.recoveryEmailVerified||!record.recoveryEmail)return {sent:false};
-  const code=String(Math.floor(100000+Math.random()*900000));
+  const code=sixDigitCode();
   record.emailRecoveryCodeHash=await digest(code);record.emailRecoveryExpiresAt=Date.now()+10*60*1000;
   return {sent:true,email:record.recoveryEmail,code};
 }
