@@ -29,17 +29,17 @@ export function defaultExperience(profileId) {
   return {
     profileId, proactiveMode:"helpful", communicationStyle:"natural", soundMode:"minimal",
     motionMode:"full", lockScreenPrivacy:"private", focusMode:false, doNotDisturb:false,
-    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, decorativeSounds:true,
+    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, voiceAssistantMode:true, decorativeSounds:true,
     pronunciation:null, preferredName:null, onboarded:false, updatedAt:now()
   };
 }
-export function experienceSettings(profileId) { return settings().get(profileId) || defaultExperience(profileId); }
+export function experienceSettings(profileId) { const saved=settings().get(profileId); return saved?{...defaultExperience(profileId),...saved}:defaultExperience(profileId); }
 export function updateExperience(profileId, patch={}) {
   const current=experienceSettings(profileId);
   const next={...current};
   const enumSet=(key,values)=>{ if(patch[key]!==undefined){ if(!values.includes(patch[key])) throw Object.assign(new Error("Invalid "+key+"."),{status:400}); next[key]=patch[key]; }};
   enumSet("proactiveMode",proactiveModes); enumSet("communicationStyle",communicationStyles); enumSet("soundMode",soundModes); enumSet("motionMode",motionModes); enumSet("lockScreenPrivacy",lockScreenPrivacy);
-  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","decorativeSounds"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
+  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","voiceAssistantMode","decorativeSounds"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
   for(const key of ["pronunciation","preferredName"]) if(patch[key]!==undefined) next[key]=patch[key]===null?null:String(patch[key]).trim().slice(0,120);
   if(patch.onboarded!==undefined) next.onboarded=Boolean(patch.onboarded);
   next.updatedAt=now(); settings().set(profileId,next); return next;
