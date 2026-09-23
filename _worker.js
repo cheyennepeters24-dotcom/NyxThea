@@ -25,6 +25,11 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
+import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
+import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
+import { classifyAction, createJob, stopJob, jobsFor } from "./src/intelligence/agency.js";
+import { attentionDecision } from "./src/intelligence/attention.js";
+import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js";
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }) });
 function identity(request) { return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 function own(request, action) { const profile = identity(request); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
@@ -34,6 +39,21 @@ async function api(request, env, url) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
   if (request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
   const profile = own(request, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
+  if (request.method === "GET" && url.pathname === "/api/experience") return json({ settings: experienceSettings(profile.id), principles: NYXTHEA_PRINCIPLES, rose: rosePresentation("idle") });
+  if (request.method === "POST" && url.pathname === "/api/experience") return json({ settings: updateExperience(profile.id, await readJson(request)) });
+  if (request.method === "POST" && url.pathname === "/api/experience/rose") return json({ rose: rosePresentation((await readJson(request)).state) });
+  if (request.method === "POST" && url.pathname === "/api/conversation/interpret") return json(interpretTurn(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/recovery") return json(recoveryLanguage(await readJson(request)));
+  if (request.method === "POST" && url.pathname === "/api/attention") return json(attentionDecision({ ...(await readJson(request)), ...experienceSettings(profile.id) }));
+  if (request.method === "GET" && url.pathname === "/api/later") return json({ items: laterItems(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/later") return json({ item: queueLater(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && /^\\/api\\/later\\/[^/]+\\/resolve$/.test(url.pathname)) return json({ item: resolveLater(profile.id, url.pathname.split("/")[3], (await readJson(request)).status) });
+  if (request.method === "POST" && url.pathname === "/api/agency/classify") return json(classifyAction(await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/agency/jobs") return json({ jobs: jobsFor(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/agency/jobs") return json({ job: createJob(profile.id, await readJson(request)) }, 201);
+  if (request.method === "POST" && /^\\/api\\/agency\\/jobs\\/[^/]+\\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
+  if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (profile.permissions.includes("household_admin") ? "owner" : "user") }));
+  if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/profiles") { if (!profile.permissions.includes("household_admin")) return json({ error: "Household administrator permission is required." }, 403); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
   if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: "temporary local-development credential" }); }
