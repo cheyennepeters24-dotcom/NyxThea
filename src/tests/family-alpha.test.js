@@ -35,3 +35,13 @@ test("device identity belongs to the person instead of becoming a new profile", 
   assert.equal(samePhone.deviceId,"phone-1");
   assert.equal(householdSummary(person.id).members.length,1);
 });
+
+
+test("DOB-derived minor profile is marked child", () => {
+  resetStateForTests();
+  const child=createProfile({displayName:"Kid"});
+  saveProfileIdentity(child,{preferredName:"Kid",birthday:"2018-08-01"});
+  assert.equal(child.role,"child");
+  assert.equal(profileIdentity(child.id).developmentalStage,"young_child");
+});
+
