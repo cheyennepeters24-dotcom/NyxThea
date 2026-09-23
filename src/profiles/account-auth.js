@@ -76,6 +76,7 @@ export async function recoverAccount({ username, recoveryCode, newPassword }) {
   const salt = random(), passwordHash = await derive(newPassword, salt), nextCode = random();
   record.salt = salt; record.passwordHash = passwordHash; record.recoveryHash = await digest(nextCode);
   for (const [key, session] of sessions()) if (session.profileId === record.profileId) sessions().delete(key);
+  for (const [key, alexaToken] of table('alexa_oauth_tokens')) if (alexaToken.profileId === record.profileId) table('alexa_oauth_tokens').delete(key);
   const profile = profileById(record.profileId);
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode: nextCode };
 }
