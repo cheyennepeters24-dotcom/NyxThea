@@ -272,6 +272,20 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
+  if (request.method === "POST" && url.pathname === "/api/voice/speak") {
+    if (!env.AI) return json({ error: "Natural voice is unavailable right now." }, 503);
+    const { text, speaker } = await readJson(request);
+    const spoken=String(text||"").trim();
+    if(!spoken||spoken.length>1800) return json({ error:"Speech text must be 1–1800 characters." },400);
+    enforceRateLimit(`${profile.id}:voice-speak`, { limit: 60, windowMs: 60000 });
+    try{
+      const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
+      const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
+      const audio=await env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+      const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
+      return new Response(audio.body,{status:audio.status,headers});
+    }catch{return json({ error:"Natural voice could not finish. Falling back to the device voice." },503);}
+  }
   if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
     if (!env.AI) return json({ error: "Voice transcription is unavailable right now." }, 503);
     const { audio, type } = await readJson(request, MAX_MEDIA_JSON_BYTES);
