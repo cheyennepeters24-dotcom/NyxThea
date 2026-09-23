@@ -27,7 +27,7 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -120,6 +120,11 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
     requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
+  }
+  if (request.method === "POST" && url.pathname === "/api/settings/change-password") {
+    requireAdultProfile(profile); const input=await readJson(request);
+    requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    return json(await changeAccountPassword(profile.id,{currentPassword:input.currentPassword,newPassword:input.newPassword}));
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
     requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
@@ -373,6 +378,17 @@ export class NyxtheaState {
           return json({text:String(result?.text||"").trim().slice(0,4000)});
         }catch{return json({error:"Voice transcription could not finish."},503)}
       }
+      if(url.pathname==="/api/voice/chat"){
+        if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true},503);
+        if(!this.mediaAllowed(profile.id,url.pathname,60))return json({answer:"Give me a second and ask that again.",degraded:true,fast:true},429);
+        const {message}=await readJson(request),prompt=String(message||"").trim();
+        if(!prompt||prompt.length>1200)return json({error:"Message must be 1–1200 characters."},400);
+        const education=educationGuidance(profile,prompt); if(!education.allowed)return json({answer:education.response,type:"education_guardrail",fast:true});
+        try{
+          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),4000))]);
+          return json({answer:response.text,modelUsed:response.modelUsed,fast:true});
+        }catch{return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true})}
+      }
       if(url.pathname==="/api/voice/speak"){
         if(!this.env.AI)return json({error:"Natural voice is unavailable right now."},503);
         if(!this.mediaAllowed(profile.id,url.pathname,60))return json({error:"Voice output is cooling down for a moment."},429);
@@ -391,7 +407,7 @@ export class NyxtheaState {
   }
   fetch(request) {
     const url=new URL(request.url);
-    if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"))return this.fastMedia(request,url);
+    if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"||url.pathname==="/api/voice/chat"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
       const before = await hydrateDurableState(this.ctx.storage);
       try { return await api(request, this.env, url); }
