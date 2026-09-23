@@ -90,6 +90,13 @@ export function saveProfileIdentity(profile,{preferredName,pronunciation,birthda
 export function addPersonToHousehold(requester,profile,{relationshipToRequester=null,relationshipLabel=null}={}){
   const household=ensureHousehold(requester.id);
   if(!requester?.permissions?.includes("household_admin")&&requester.id!=="owner"&&household.createdBy!==requester.id)fail("Household administrator permission is required.",403);
+  for(const [key,membership] of memberships()){
+    if(membership.profileId===profile.id&&membership.householdId!==household.id&&membership.active!==false){
+      memberships().delete(key);
+      const remaining=list("household_memberships",x=>x.householdId===membership.householdId&&x.active!==false);
+      if(!remaining.length)households().delete(membership.householdId);
+    }
+  }
   memberships().set(`${household.id}:${profile.id}`,{householdId:household.id,profileId:profile.id,role:"member",active:true,joinedAt:now()});
   household.mode="family";household.updatedAt=now();households().set(household.id,household);
   if(relationshipToRequester)setRelationship(requester.id,profile.id,relationshipToRequester,{label:relationshipLabel});
