@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-fix-launch-and-meet-freeze
-Source commit: aa566262cf89c3bd0a03747ae37c2f03978d17b2
+Release: family-alpha-noise-smoothing-and-rose
+Source commit: 688bb4028beaf2f0c2b944c6901c80681dd74b8a
