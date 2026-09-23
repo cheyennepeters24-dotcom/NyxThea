@@ -37,7 +37,22 @@ import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js"
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
-async function own(request, env, action) { const profile = await identity(request, env); if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 }); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
+async function own(request, env, action) {
+  const profile = await identity(request, env);
+  if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 });
+  const path=new URL(request.url).pathname;
+  const lockExempt=path.startsWith("/api/profile-lock")||path==="/api/devices/register";
+  if(!lockExempt){
+    try{
+      const deviceId=request.headers.get("x-nyxthea-device")||"";
+      const state=deviceLockState(profile,{deviceId});
+      if(state.enabled&&state.locked)throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
+    }catch(error){if(error?.status===423)throw error;}
+  }
+  enforceRateLimit(`${profile.id}:${path}`);
+  recordAccess({ profileId: profile.id, action });
+  return profile;
+}
 function requireAdmin(profile) { if (!profile.permissions.includes("household_admin")) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
