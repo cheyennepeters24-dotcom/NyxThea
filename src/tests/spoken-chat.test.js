@@ -17,3 +17,17 @@ test("a failed model gives a candid answer and conversation has time to finish",
   assert.match(response.answer, /I heard you/);
   assert.equal(response.modelUsed, false);
 });
+
+
+test("empty first model response is retried before degrading", async () => {
+  let calls=0;
+  const response = await converse({ run: async () => { calls++; return calls===1 ? { response:"" } : { response:"Second try worked." }; } }, "Tell me something useful.", {});
+  assert.equal(response.text, "Second try worked.");
+  assert.equal(calls, 2);
+});
+
+test("Nyxthea can describe herself without model dependency", async () => {
+  const response = await converse({ run: async () => { throw Error("model should not run"); } }, "Can you tell me a little bit about you and what all you can do?", {});
+  assert.match(response.text, /voice-first personal and household assistant/i);
+  assert.equal(response.modelUsed, false);
+});
