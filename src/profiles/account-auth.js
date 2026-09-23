@@ -30,6 +30,7 @@ export async function registerAccount({ username, password, displayName }) {
   if (accounts().has(name)) failure('That username is unavailable.', 409);
   const salt = random(); const passwordHash = await derive(password, salt);
   const profile = createProfile({ displayName: display });
+  profile.role = "adult";
   const recoveryCode = random();
   accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, recoveryHash: await digest(recoveryCode), createdAt: now() });
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
