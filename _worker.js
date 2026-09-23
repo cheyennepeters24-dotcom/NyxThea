@@ -47,11 +47,11 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/attention") return json(attentionDecision({ ...(await readJson(request)), ...experienceSettings(profile.id) }));
   if (request.method === "GET" && url.pathname === "/api/later") return json({ items: laterItems(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/later") return json({ item: queueLater(profile.id, await readJson(request)) }, 201);
-  if (request.method === "POST" && /^\\/api\\/later\\/[^/]+\\/resolve$/.test(url.pathname)) return json({ item: resolveLater(profile.id, url.pathname.split("/")[3], (await readJson(request)).status) });
+  if (request.method === "POST" && /^\/api\/later\/[^/]+\/resolve$/.test(url.pathname)) return json({ item: resolveLater(profile.id, url.pathname.split("/")[3], (await readJson(request)).status) });
   if (request.method === "POST" && url.pathname === "/api/agency/classify") return json(classifyAction(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/agency/jobs") return json({ jobs: jobsFor(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/agency/jobs") return json({ job: createJob(profile.id, await readJson(request)) }, 201);
-  if (request.method === "POST" && /^\\/api\\/agency\\/jobs\\/[^/]+\\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
+  if (request.method === "POST" && /^\/api\/agency\/jobs\/[^/]+\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
   if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (profile.permissions.includes("household_admin") ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
