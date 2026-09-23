@@ -135,3 +135,17 @@ test('adult Settings require fresh verification and child profiles are denied', 
   const childSettings = await call('/api/settings/verify-password', { method: 'POST', cookie: childCookie, headers: { 'x-nyxthea-device': 'child-phone' }, data: { password: 'settings-child-password-123', deviceId: 'child-phone' } });
   assert.equal(childSettings.status, 403);
 });
+
+
+test('adult profile cannot be unlocked through a direct bypass endpoint', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'lock-bypass', displayName: 'Adult', password: 'lock-bypass-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0], device='lock-phone';
+  const verified = await body(await call('/api/settings/verify-password', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { password: 'lock-bypass-password-123', deviceId: device } }));
+  await call('/api/profile-lock/pin', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '1357', deviceId: device } });
+  await call('/api/profile-lock/lock-device', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { deviceId: device } });
+  const bypass = await call('/api/profile-lock/unlock-device', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { deviceId: device } });
+  assert.equal(bypass.status, 404);
+  const pin = await call('/api/profile-lock/pin/verify', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { pin: '1357', deviceId: device } });
+  assert.equal(pin.status, 200);
+});
