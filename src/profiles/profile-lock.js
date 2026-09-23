@@ -2,6 +2,7 @@ import { now, table } from "../state/store.js";
 import { profileIdentity } from "./household-identity.js";
 
 const locks=()=>table("profile_locks");
+const challenges=()=>table("profile_lock_challenges");
 const encoder=new TextEncoder();
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const hex=bytes=>[...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,"0")).join("");
@@ -10,6 +11,10 @@ async function derive(pin,salt){
   return hex(await crypto.subtle.deriveBits({name:"PBKDF2",salt:encoder.encode(salt),iterations:120000,hash:"SHA-256"},key,256));
 }
 const random=()=>`${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g,"")}`;
+const b64url=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const fromB64url=value=>Uint8Array.from(atob(String(value).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(value).length+3)%4)),c=>c.charCodeAt(0));
+async function sha256(bytes){return new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));}
+function bytesEqual(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
 function assertAdult(profile){
   const identity=profileIdentity(profile.id);
   const adult=identity?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions?.includes("household_admin");
@@ -44,15 +49,50 @@ export async function verifyProfilePin(profile,{pin}={}){
   if(candidate!==current.pinHash)fail("Incorrect PIN.",401);
   return {ok:true};
 }
-export function addBiometricCredential(profile,{deviceId,credentialId,label}={}){
+export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={}){
   assertAdult(profile);
-  const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024);
-  if(!d||!c)fail("Device and biometric credential are required.");
+  const d=String(deviceId||"").trim().slice(0,128);if(!d)fail("Device identifier is required.");
+  if(!["register","unlock","settings"].includes(purpose))fail("Unsupported biometric purpose.");
+  const bytes=crypto.getRandomValues(new Uint8Array(32)),challenge=b64url(bytes),key=`${profile.id}:${d}:${purpose}`;
+  challenges().set(key,{profileId:profile.id,deviceId:d,purpose,challenge,origin:String(origin||"").slice(0,240),rpId:String(rpId||"").slice(0,240),expiresAt:Date.now()+5*60*1000});
+  return {challenge,purpose};
+}
+function readChallenge(profile,deviceId,purpose){
+  const key=`${profile.id}:${deviceId}:${purpose}`,record=challenges().get(key);
+  if(!record||record.expiresAt<=Date.now())fail("Biometric challenge is invalid or expired.",401);
+  challenges().delete(key);return record;
+}
+function parseClientData(value,record,expectedType){
+  let parsed;try{parsed=JSON.parse(new TextDecoder().decode(fromB64url(value)));}catch{fail("Biometric response is invalid.",401);}
+  if(parsed.type!==expectedType||parsed.challenge!==record.challenge||parsed.origin!==record.origin)fail("Biometric response could not be verified.",401);
+  return parsed;
+}
+export function addBiometricCredential(profile,{deviceId,credentialId,publicKey,algorithm=-7,label,clientDataJSON}={}){
+  assertAdult(profile);
+  const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024),p=String(publicKey||"").trim();
+  if(!d||!c||!p||!clientDataJSON)fail("Device biometric credential is incomplete.");
+  const challenge=readChallenge(profile,d,"register");parseClientData(clientDataJSON,challenge,"webauthn.create");
   const current=locks().get(profile.id)||{profileId:profile.id,biometricDevices:[]};
   const devices=Array.isArray(current.biometricDevices)?current.biometricDevices:[];
-  current.biometricDevices=[...devices.filter(x=>x.deviceId!==d),{deviceId:d,credentialId:c,label:String(label||"").trim().slice(0,80)||null,addedAt:now()}];
+  current.biometricDevices=[...devices.filter(x=>x.deviceId!==d),{deviceId:d,credentialId:c,publicKey:p,algorithm:Number(algorithm),rpId:challenge.rpId,label:String(label||"").trim().slice(0,80)||null,addedAt:now()}];
   current.biometricEnabled=true;current.enabled=true;current.updatedAt=now();
   locks().set(profile.id,current);return profileLock(profile);
+}
+export async function verifyBiometricCredential(profile,{deviceId,purpose="unlock",credentialId,clientDataJSON,authenticatorData,signature}={}){
+  assertAdult(profile);
+  const d=String(deviceId||"").trim().slice(0,128),current=locks().get(profile.id),credential=(current?.biometricDevices||[]).find(x=>x.deviceId===d&&x.credentialId===credentialId);
+  if(!credential)fail("Device biometric unlock is not registered.",404);
+  const challenge=readChallenge(profile,d,purpose);parseClientData(clientDataJSON,challenge,"webauthn.get");
+  const auth=fromB64url(authenticatorData);if(auth.length<37)fail("Biometric response is invalid.",401);
+  const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric response is for a different site.",401);
+  if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
+  const clientBytes=fromB64url(clientDataJSON),clientHash=await sha256(clientBytes),signed=new Uint8Array(auth.length+clientHash.length);signed.set(auth);signed.set(clientHash,auth.length);
+  let key,algorithm;
+  if(Number(credential.algorithm)===-7){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);algorithm={name:"ECDSA",hash:"SHA-256"};}
+  else if(Number(credential.algorithm)===-257){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);algorithm={name:"RSASSA-PKCS1-v1_5"};}
+  else fail("Unsupported biometric credential algorithm.",400);
+  const ok=await crypto.subtle.verify(algorithm,key,fromB64url(signature),signed);if(!ok)fail("Biometric verification failed.",401);
+  return {ok:true,purpose};
 }
 export function removeBiometricCredential(profile,{deviceId}={}){
   assertAdult(profile);
