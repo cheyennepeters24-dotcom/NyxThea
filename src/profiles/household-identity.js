@@ -87,8 +87,8 @@ export function saveProfileIdentity(profile,{preferredName,pronunciation,birthda
   return profileIdentity(profile.id);
 }
 export function addPersonToHousehold(requester,profile,{relationshipToRequester=null,relationshipLabel=null}={}){
-  if(!requester?.permissions?.includes("household_admin")&&requester.id!=="owner")fail("Household administrator permission is required.",403);
   const household=ensureHousehold(requester.id);
+  if(!requester?.permissions?.includes("household_admin")&&requester.id!=="owner"&&household.createdBy!==requester.id)fail("Household administrator permission is required.",403);
   memberships().set(`${household.id}:${profile.id}`,{householdId:household.id,profileId:profile.id,role:"member",active:true,joinedAt:now()});
   household.mode="family";household.updatedAt=now();households().set(household.id,household);
   if(relationshipToRequester)setRelationship(requester.id,profile.id,relationshipToRequester,{label:relationshipLabel});
