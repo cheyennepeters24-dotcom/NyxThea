@@ -113,3 +113,25 @@ test('a household invite claims the existing profile instead of creating a dupli
   const reused = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: metInfo.claimCode, username: 'kid-profile-2', password: 'kid-profile-password-456' } });
   assert.equal(reused.status, 401);
 });
+
+
+test('adult Settings require fresh verification and child profiles are denied', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const adultSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'settings-adult', displayName: 'Adult', password: 'settings-adult-password-123' } });
+  const adultCookie = adultSignup.headers.get('set-cookie').split(';')[0];
+  const device = 'adult-phone';
+  const wrong = await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'wrong', deviceId: device } });
+  assert.equal(wrong.status, 401);
+  const verified = await body(await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'settings-adult-password-123', deviceId: device } }));
+  assert.ok(verified.authorization.token);
+  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
+  assert.equal(pinSet.status, 200);
+  const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
+  assert.ok(pinVerified.authorization.token);
+
+  const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  const childSettings = await call('/api/settings/verify-password', { method: 'POST', cookie: childCookie, headers: { 'x-nyxthea-device': 'child-phone' }, data: { password: 'settings-child-password-123', deviceId: 'child-phone' } });
+  assert.equal(childSettings.status, 403);
+});
