@@ -197,7 +197,7 @@ window.NYXVoice=NYXVoice;
 // Foreground-only, explicitly enabled for this profile. The browser's speech
 // recognizer may process audio; NyxThea sends only addressed turns to its API.
 const NYXHandsFree={
- active:false,paused:false,stream:null,recorder:null,timer:null,chunkBusy:false,engagedUntil:0,failures:0,generation:0,recognition:null,
+ active:false,paused:false,stream:null,recorder:null,timer:null,chunkBusy:false,engagedUntil:0,failures:0,generation:0,recognition:null,persistentStream:false,
  label(message){const b=document.getElementById("wakeToggle");b.textContent=this.active?"Stop voice activation":"Enable voice activation";b.setAttribute("aria-pressed",String(this.active));if(message)state(this.active?"listening":"ready",message)},
  async start(){
    if(this.active)return;
@@ -207,7 +207,15 @@ const NYXHandsFree={
    this.label("Listening for NyxThea");
    await this.open();
  },
- stop(message="Voice activation off"){NYXSound.forceSession=false;
+ async startWithStream(stream){
+   if(!stream)return this.start();
+   if(!credential){try{stream.getTracks().forEach(t=>t.stop())}catch{};unlock();return}
+   this.active=true;this.paused=false;this.failures=0;this.engagedUntil=0;this.generation++;
+   this.stream=stream;this.persistentStream=true;
+   this.label("Listening for Hey Nyx");
+   this.recordChunk();
+ },
+ stop(message="Voice activation off"){NYXSound.forceSession=false;this.persistentStream=false;
    const wasActive=this.active;this.active=false;this.paused=false;this.engagedUntil=0;this.generation++;
    clearTimeout(this.timer);this.timer=null;
    try{if(this.recorder&&this.recorder.state!=="inactive")this.recorder.stop()}catch{}
@@ -222,14 +230,14 @@ const NYXHandsFree={
    this.paused=true;clearTimeout(this.timer);this.timer=null;
    try{if(this.recorder&&this.recorder.state!=="inactive")this.recorder.stop()}catch{}
    this.recorder=null;try{this.recognition?.abort()}catch{}this.recognition=null;
-   try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null;
+   if(!this.persistentStream){try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null}
    state("thinking","Thinking")
  },
  resume(){
    if(!this.active||document.hidden)return;
    if(this.engagedUntil>Date.now())this.engagedUntil=Date.now()+45000;
-   this.paused=false;this.label("Listening for NyxThea");
-   setTimeout(()=>this.open(),360)
+   this.paused=false;this.label("Listening for Hey Nyx");
+   setTimeout(()=>{if(this.persistentStream&&this.stream)this.recordChunk();else this.open()},260)
  },
  async open(){
    if(!this.active||this.paused||document.hidden||this.stream||this.recorder||this.recognition)return;
@@ -264,7 +272,7 @@ const NYXHandsFree={
      };
      recorder.start();
      const engaged=Date.now()<this.engagedUntil;
-     this.timer=setTimeout(()=>{try{if(recorder.state!=="inactive")recorder.stop()}catch{}},engaged?2200:1400)
+     this.timer=setTimeout(()=>{try{if(recorder.state!=="inactive")recorder.stop()}catch{}},engaged?2100:1600)
    }catch{this.recorder=null;this.openSpeechFallback()}
  },
  async processChunk(blob,token){
@@ -380,10 +388,10 @@ const NYXExperience={
      button.disabled=true;button.textContent="Starting…";status.textContent="Opening microphone…";
      NYXSound.forceSession=true;
      try{const cue=nyxStartupAudio();cue.currentTime=0;void cue.play().catch(()=>{})}catch{}
+     let wakeStream=null;
      try{
        if(!navigator.mediaDevices?.getUserMedia)throw new Error("Microphone access is not available.");
-       const stream=await nyxTimed(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),4500,"Microphone permission timed out.");
-       try{stream.getTracks().forEach(t=>t.stop())}catch{}
+       wakeStream=await nyxTimed(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),4500,"Microphone permission timed out.");
      }catch(e){
        status.textContent=(e?.message||"Microphone could not start.")+" Tap Start NYX to try again.";
        button.disabled=false;button.textContent="Start NYX";return;
@@ -392,7 +400,7 @@ const NYXExperience={
      status.textContent="NYX is ready.";
      const spoken=await NYXVoice.say(greeting);
      if(!spoken){state("ready","Voice ready");}
-     await NYXHandsFree.start();
+     await NYXHandsFree.startWithStream(wakeStream);
    };
  },
  async sayAndListen(prompt,{hint="I’m listening…",timeout=12000}={}){
