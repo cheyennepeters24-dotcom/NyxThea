@@ -285,19 +285,28 @@ const NYXHandsFree={
    if(!this.active||this.paused||this.recognition||document.hidden)return;
    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
    if(!SR){this.label("Wake listening is unavailable in this browser");return}
-   const token=this.generation,r=new SR;this.recognition=r;r.lang="en-US";r.continuous=true;r.interimResults=false;r.maxAlternatives=3;
+   const token=this.generation,r=new SR;this.recognition=r;r.lang="en-US";r.continuous=false;r.interimResults=false;r.maxAlternatives=3;
+   let heardSomething=false;
    r.onstart=()=>{this.failures=0;this.label("Listening for Hey Nyx")};
    r.onresult=e=>{
      if(!this.active||this.paused||token!==this.generation)return;
-     for(let i=e.resultIndex||0;i<e.results.length;i++){
-       const result=e.results[i];if(result?.isFinal===false)continue;
-       const heard=result?.[0],spoken=heard?.transcript?.trim();
-       if(spoken){void this.heard(spoken,heard.confidence);break}
-     }
+     const result=e.results?.[0],heard=result?.[0],spoken=heard?.transcript?.trim();
+     if(spoken){heardSomething=true;void this.heard(spoken,heard.confidence)}
    };
-   r.onerror=e=>{if(!this.active||token!==this.generation||["aborted","no-speech"].includes(e.error))return;this.failures++};
-   r.onend=()=>{if(this.recognition===r)this.recognition=null;if(this.active&&!this.paused&&token===this.generation)setTimeout(()=>this.openSpeechFallback(),120)};
-   try{r.start()}catch{this.recognition=null;if(this.active&&!this.paused)setTimeout(()=>this.open(),180)}
+   r.onerror=e=>{
+     if(!this.active||token!==this.generation||["aborted","no-speech"].includes(e.error))return;
+     this.failures++;
+     if(this.failures>=3){this.label("Wake listener is retrying");this.failures=0}
+   };
+   r.onend=()=>{
+     if(this.recognition===r)this.recognition=null;
+     if(!this.active||this.paused||token!==this.generation||document.hidden)return;
+     setTimeout(()=>this.openSpeechFallback(),heardSomething?180:260)
+   };
+   try{r.start()}catch{
+     this.recognition=null;
+     if(this.active&&!this.paused)setTimeout(()=>this.openSpeechFallback(),350)
+   }
  },
  async heard(spoken,confidence){
    if(!this.active)return;
