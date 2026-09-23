@@ -7,7 +7,7 @@ import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, v
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
 import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
 import { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
-import { addBiometricCredential, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyProfilePin } from "./src/profiles/profile-lock.js";
+import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
@@ -170,8 +170,18 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin/verify") {
     const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
   }
-  if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/begin") {
+    const input=await readJson(request); const origin=new URL(request.url).origin, rpId=new URL(request.url).hostname;
+    return json(beginBiometric(profile,{...input,origin,rpId}));
+  }
+    if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
     const input=await readJson(request); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/verify") {
+    const input=await readJson(request); const result=await verifyBiometricCredential(profile,input);
+    const payload={verified:true,unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId})};
+    if(input.purpose==="settings") payload.authorization=issueSettingsAuthorization(profile.id,input.deviceId);
+    return json(payload);
   }
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock/biometric") {
     const input=await readJson(request); return json({ lock:removeBiometricCredential(profile,input) });
