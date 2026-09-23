@@ -1,0 +1,4 @@
+NyxThea production deploy trigger
+Target: main
+Release: living-rose-onboarding-and-core-voice
+Source commit: 4bf6a5312eb9d5a93a2e865365426f518b09d8cf
