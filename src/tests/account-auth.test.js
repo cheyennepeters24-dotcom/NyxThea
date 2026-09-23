@@ -138,6 +138,28 @@ test('adult Settings require fresh verification and child profiles are denied', 
 });
 
 
+test('household owner can manage integrations and save interface modules without a phantom admin flag', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'owner-ui', displayName: 'Owner', password: 'owner-ui-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const device='owner-ui-phone';
+
+  const integration = await call('/api/integrations', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{ kind:'amazon_alexa_echo', permissions:[] }
+  });
+  assert.equal(integration.status, 201);
+
+  const saved = await body(await call('/api/experience', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{ visibleModules:['world','security','amazon_alexa_echo'] }
+  }));
+  assert.deepEqual(saved.settings.visibleModules,['world','security','amazon_alexa_echo']);
+  const loaded = await body(await call('/api/experience', { cookie, headers:{'x-nyxthea-device':device} }));
+  assert.deepEqual(loaded.settings.visibleModules,['world','security','amazon_alexa_echo']);
+});
+
+
 test('adult profile cannot be unlocked through a direct bypass endpoint', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'lock-bypass', displayName: 'Adult', password: 'lock-bypass-password-123' } });
