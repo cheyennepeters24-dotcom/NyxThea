@@ -6,6 +6,8 @@ import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
 import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
+import { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
+import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
@@ -25,7 +27,7 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -33,10 +35,32 @@ import { classifyAction, createJob, stopJob, jobsFor } from "./src/intelligence/
 import { attentionDecision } from "./src/intelligence/attention.js";
 import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js";
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
+import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-mail.js";
+import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
-async function own(request, env, action) { const profile = await identity(request, env); if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 }); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
+async function own(request, env, action) {
+  const profile = await identity(request, env);
+  if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 });
+  const path=new URL(request.url).pathname;
+  const lockExempt=path.startsWith("/api/profile-lock")||path==="/api/devices/register";
+  if(!lockExempt){
+    try{
+      const deviceId=request.headers.get("x-nyxthea-device")||"";
+      const state=deviceLockState(profile,{deviceId});
+      if(state.enabled&&state.locked)throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
+    }catch(error){if(error?.status===423)throw error;}
+  }
+  enforceRateLimit(`${profile.id}:${path}`);
+  recordAccess({ profileId: profile.id, action });
+  return profile;
+}
 function requireAdmin(profile) { if (!profile.permissions.includes("household_admin")) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function requireAdultProfile(profile) {
+  const identityRecord=profileIdentity(profile.id);
+  const adult=identityRecord?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin");
+  if(!adult)throw Object.assign(new Error("Adult verification is required for Settings."),{status:403});
+}
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
@@ -57,16 +81,28 @@ async function api(request, env, url) {
     const result = await orchestrate({ ai: env.AI, message: prompt, memories: [], conversation: [], authorization: { action: false }, mode: "normal" });
     return json({ answer: result.answer || "I'm having trouble answering right now. Please try again." });
   }
-  if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
+  if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover", "/api/auth/claim", "/api/auth/recover-email/start", "/api/auth/recover-email/complete"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
   if (request.method === "POST" && url.pathname === "/api/auth/register") { authLimit(request, "register", 20, 3600000); const result = await registerAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 201, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/login") { authLimit(request, "login", 10, 900000); const result = await loginAccount(await readJson(request)); return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) }); }
+  if (request.method === "POST" && url.pathname === "/api/auth/claim") { authLimit(request, "claim", 10, 900000); const result = await claimProfileAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover") { authLimit(request, "recover", 5, 900000); const result = await recoverAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
+  if (request.method === "POST" && url.pathname === "/api/auth/recover-email/start") {
+    authLimit(request, "recover-email", 5, 900000);
+    const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
+    if(result.sent){await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code});}
+    return json({sent:Boolean(result.sent)&&mailConfigured(env)});
+  }
+  if (request.method === "POST" && url.pathname === "/api/auth/recover-email/complete") {
+    authLimit(request, "recover-email-complete", 10, 900000);
+    const result=await completeEmailPasswordRecovery(await readJson(request));
+    return json({profile:result.profile,recoveryCode:result.recoveryCode},200,{"set-cookie":sessionCookie(result.token)});
+  }
   if (request.method === "POST" && url.pathname === "/api/auth/logout") { await logoutAccount(request); return json({ ok: true }, 200, { "set-cookie": clearSessionCookie }); }
   if (request.method === "GET" && url.pathname === "/api/auth/session") { const current = await cookieProfile(request); return json({ profile: current ? profileSummary(current) : null }); }
   if (!env.NYXTHEA_STATE && request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
   const profile = await own(request, env, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
   if (request.method === "GET" && url.pathname === "/api/experience") return json({ settings: experienceSettings(profile.id), principles: NYXTHEA_PRINCIPLES, rose: rosePresentation("idle") });
-  if (request.method === "POST" && url.pathname === "/api/experience") return json({ settings: updateExperience(profile.id, await readJson(request)) });
+  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); if (profile.role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
   if (request.method === "POST" && url.pathname === "/api/experience/rose") return json({ rose: rosePresentation((await readJson(request)).state) });
   if (request.method === "POST" && url.pathname === "/api/conversation/interpret") return json(interpretTurn(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/recovery") return json(recoveryLanguage(await readJson(request)));
@@ -81,6 +117,95 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (profile.permissions.includes("household_admin") ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
+    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
+  }
+  if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
+    requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
+    return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
+  }
+  if (request.method === "GET" && url.pathname === "/api/recovery/status") return json({recovery:accountRecoveryStatus(profile.id),emailDeliveryConfigured:mailConfigured(env)});
+  if (request.method === "POST" && url.pathname === "/api/recovery/email/start") {
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    const result=await startRecoveryEmailVerification(profile.id,input.email);
+    await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code});
+    return json({sent:true,email:result.email});
+  }
+  if (request.method === "POST" && url.pathname === "/api/recovery/email/confirm") {
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    return json(await confirmRecoveryEmail(profile.id,input.code));
+  }
+  if (request.method === "GET" && url.pathname === "/api/household/identity") return json({ identity: profileIdentity(profile.id), household: householdSummary(profile.id), devices: devicesFor(profile.id) });
+  if (request.method === "POST" && url.pathname === "/api/household/identity") {
+    const input = await readJson(request);
+    const identityRecord = saveProfileIdentity(profile, input);
+    const experiencePatch = {};
+    if (input.preferredName !== undefined) experiencePatch.preferredName = input.preferredName;
+    if (input.pronunciation !== undefined) experiencePatch.pronunciation = input.pronunciation;
+    const settings = Object.keys(experiencePatch).length ? updateExperience(profile.id, experiencePatch) : experienceSettings(profile.id);
+    return json({ identity: identityRecord, household: householdSummary(profile.id), settings });
+  }
+  if (request.method === "POST" && url.pathname === "/api/household/meet") {
+    const input = await readJson(request);
+    if (!input.displayName?.trim()) return json({ error: "Tell me the new person's name first." }, 400);
+    const created = createProfile({ displayName: input.displayName });
+    saveProfileIdentity(created, { preferredName: input.displayName, pronunciation: input.pronunciation, birthday: input.birthday, birthdayMonthDay: input.birthdayMonthDay });
+    const household = addPersonToHousehold(profile, created, { relationshipToRequester: input.relationshipToRequester, relationshipLabel: input.relationshipLabel });
+    const claimCode = await createProfileClaimInvite(created.id, profile.id);
+    return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household, claimCode }, 201);
+  }
+  if (request.method === "POST" && url.pathname === "/api/household/relationship") {
+    const input = await readJson(request);
+    const household = householdSummary(profile.id);
+    if (!household.members.some(member => member.profileId === input.toProfileId)) return json({ error: "That person is not in this household." }, 404);
+    return json({ relationship: setRelationship(profile.id, input.toProfileId, input.type, { label: input.label }), household: householdSummary(profile.id) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/devices/register") {
+    const input = await readJson(request);
+    return json({ device: registerDevice(profile.id, { ...input, userAgent: request.headers.get("user-agent") || input.userAgent }) }, 201);
+  }
+  if (request.method === "GET" && url.pathname === "/api/devices") return json({ devices: devicesFor(profile.id) });
+  if (request.method === "GET" && url.pathname === "/api/profile-lock") {
+    const deviceId=url.searchParams.get("deviceId")||"";
+    let state=null; try { state=deviceLockState(profile,{deviceId}); } catch { state={enabled:false,locked:false}; }
+    return json({ lock: profileLock(profile), state });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") { const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await setProfilePin(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) }); }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/pin/verify") {
+    const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/password/verify") {
+    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    return json({unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}),lock:profileLock(profile)});
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/begin") {
+    const input=await readJson(request); const origin=new URL(request.url).origin, rpId=new URL(request.url).hostname;
+    return json(beginBiometric(profile,{...input,origin,rpId}));
+  }
+    if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/verify") {
+    const input=await readJson(request); const result=await verifyBiometricCredential(profile,input);
+    const payload={verified:true,unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId})};
+    if(input.purpose==="settings") payload.authorization=issueSettingsAuthorization(profile.id,input.deviceId);
+    return json(payload);
+  }
+  if (request.method === "DELETE" && url.pathname === "/api/profile-lock/biometric") {
+    const input=await readJson(request); return json({ lock:removeBiometricCredential(profile,input) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/unlock-device") {
+    const input=await readJson(request); return json({ unlock:markDeviceUnlocked(profile,input) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/lock-device") {
+    const input=await readJson(request); return json({ lock:markDeviceLocked(profile,input) });
+  }
+  if (request.method === "DELETE" && url.pathname === "/api/profile-lock") { requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth")); return json({ lock:disableProfileLock(profile) }); }
+  if (request.method === "POST" && /^\/api\/devices\/[^/]+\/trust$/.test(url.pathname)) {
+    const input = await readJson(request);
+    return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
+  }
   if (request.method === "POST" && url.pathname === "/api/profiles") { if (!profile.permissions.includes("household_admin")) return json({ error: "Household administrator permission is required." }, 403); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
   if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: env.NYXTHEA_STATE ? "password account and server session" : "temporary local-development credential" }); }
   if (request.method === "GET" && url.pathname === "/api/capabilities") return json({ capabilities: getCapabilities({ aiConnected: Boolean(env.AI), integrations: integrationStatus(profile.id) }) });
@@ -154,12 +279,9 @@ async function api(request, env, url) {
     if (!env.AI) return json({ error: "Voice transcription is unavailable right now." }, 503);
     const { audio, type } = await readJson(request, MAX_MEDIA_JSON_BYTES);
     if (typeof audio !== "string" || audio.length < 100 || audio.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio) || !["audio/mp4", "audio/webm", "audio/wav", "audio/ogg", "audio/mpeg", "audio/x-m4a"].includes(type)) return json({ error: "Please record a short audio clip and try again." }, 400);
-    const usage = table("voice_transcription_limits"), day = new Date().toISOString().slice(0, 10), key = `${profile.id}:${day}`;
-    const count = usage.get(key) || 0, totalKey = `all:${day}`, total = usage.get(totalKey) || 0;
-    if (count >= 30) return json({ error: "The daily voice limit has been reached. Please type your message for now." }, 429);
-    if (total >= 80) return json({ error: "Voice input is resting for today. Please type your message for now." }, 429);
-    usage.set(key, count + 1);
-    usage.set(totalKey, total + 1);
+    // Family Alpha rule: ordinary conversation never hits a daily "come back later" quota.
+    // Keep only burst protection so a runaway client cannot hammer transcription infrastructure.
+    enforceRateLimit(`${profile.id}:voice-transcribe`, { limit: 90, windowMs: 60000 });
     try {
       const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" });
       const text = String(result?.text || "").trim().slice(0, 4000);

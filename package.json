@@ -1,1 +1,10 @@
-{"name":"nyxthea","private":true,"type":"module","scripts":{"test":"node --test src/tests/*.test.js","check":"node --check _worker.js"}}
+{
+  "name": "nyxthea",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/tests/*.test.js",
+    "check": "node --check _worker.js",
+    "check:ui": "node scripts/check-ui.mjs"
+  }
+}

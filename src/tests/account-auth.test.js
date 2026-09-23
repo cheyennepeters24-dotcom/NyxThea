@@ -90,3 +90,48 @@ test('voice activation checks a registered name without trusting a caller-suppli
   assert.equal(result.safeToRespond, true);
   assert.equal(result.request, 'can you help');
 });
+
+
+test('a household invite claims the existing profile instead of creating a duplicate', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const ownerSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'family-owner', displayName: 'Owner', password: 'family-owner-password-123' } });
+  const ownerCookie = ownerSignup.headers.get('set-cookie').split(';')[0];
+  await call('/api/household/identity', { method: 'POST', cookie: ownerCookie, data: { preferredName: 'Owner', birthday: '1990-01-01' } });
+  const met = await call('/api/household/meet', { method: 'POST', cookie: ownerCookie, data: { displayName: 'Kid', birthday: '2018-08-01', relationshipToRequester: 'daughter' } });
+  assert.equal(met.status, 201);
+  const metInfo = await body(met);
+  assert.equal(metInfo.identity.developmentalStage, 'young_child');
+  const childProfileId = metInfo.profile.id;
+
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: metInfo.claimCode, username: 'kid-profile', password: 'kid-profile-password-123' } });
+  assert.equal(claimed.status, 200);
+  const claimInfo = await body(claimed);
+  assert.equal(claimInfo.profile.id, childProfileId);
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  assert.equal((await body(await call('/api/auth/session', { cookie: childCookie }))).profile.id, childProfileId);
+
+  const reused = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: metInfo.claimCode, username: 'kid-profile-2', password: 'kid-profile-password-456' } });
+  assert.equal(reused.status, 401);
+});
+
+
+test('adult Settings require fresh verification and child profiles are denied', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const adultSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'settings-adult', displayName: 'Adult', password: 'settings-adult-password-123' } });
+  const adultCookie = adultSignup.headers.get('set-cookie').split(';')[0];
+  const device = 'adult-phone';
+  const wrong = await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'wrong', deviceId: device } });
+  assert.equal(wrong.status, 401);
+  const verified = await body(await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'settings-adult-password-123', deviceId: device } }));
+  assert.ok(verified.authorization.token);
+  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
+  assert.equal(pinSet.status, 200);
+  const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
+  assert.ok(pinVerified.authorization.token);
+
+  const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  const childSettings = await call('/api/settings/verify-password', { method: 'POST', cookie: childCookie, headers: { 'x-nyxthea-device': 'child-phone' }, data: { password: 'settings-child-password-123', deviceId: 'child-phone' } });
+  assert.equal(childSettings.status, 403);
+});
