@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-celestial-sound-cues
-Source commit: 6b77d5b8de9304ab43f449a57e17248fbdf578b4
+Release: family-alpha-fix-launch-and-meet-freeze
+Source commit: aa566262cf89c3bd0a03747ae37c2f03978d17b2
