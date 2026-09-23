@@ -56,6 +56,11 @@ async function own(request, env, action) {
   return profile;
 }
 function requireAdmin(profile) { if (!profile.permissions.includes("household_admin")) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function requireAdultProfile(profile) {
+  const identityRecord=profileIdentity(profile.id);
+  const adult=identityRecord?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin");
+  if(!adult)throw Object.assign(new Error("Adult verification is required for Settings."),{status:403});
+}
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
@@ -97,7 +102,7 @@ async function api(request, env, url) {
   if (!env.NYXTHEA_STATE && request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
   const profile = await own(request, env, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
   if (request.method === "GET" && url.pathname === "/api/experience") return json({ settings: experienceSettings(profile.id), principles: NYXTHEA_PRINCIPLES, rose: rosePresentation("idle") });
-  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); const deviceId=request.headers.get("x-nyxthea-device")||""; const settingsToken=request.headers.get("x-nyxthea-settings-auth"); if(settingsToken) requireSettingsAuthorization(profile.id,deviceId,settingsToken); if (profile.role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
+  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); const deviceId=request.headers.get("x-nyxthea-device")||""; const settingsToken=request.headers.get("x-nyxthea-settings-auth"); if(experienceSettings(profile.id).onboarded) requireSettingsAuthorization(profile.id,deviceId,settingsToken); if (profile.role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
   if (request.method === "POST" && url.pathname === "/api/experience/rose") return json({ rose: rosePresentation((await readJson(request)).state) });
   if (request.method === "POST" && url.pathname === "/api/conversation/interpret") return json(interpretTurn(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/recovery") return json(recoveryLanguage(await readJson(request)));
@@ -113,11 +118,11 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
-    const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
-    const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
+    requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "GET" && url.pathname === "/api/recovery/status") return json({recovery:accountRecoveryStatus(profile.id),emailDeliveryConfigured:mailConfigured(env)});
@@ -166,16 +171,20 @@ async function api(request, env, url) {
     let state=null; try { state=deviceLockState(profile,{deviceId}); } catch { state={enabled:false,locked:false}; }
     return json({ lock: profileLock(profile), state });
   }
-  if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") return json({ lock: await setProfilePin(profile, await readJson(request)) });
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") { const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); return json({ lock: await setProfilePin(profile,input) }); }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin/verify") {
     const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
+  }
+  if (request.method === "POST" && url.pathname === "/api/profile-lock/password/verify") {
+    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    return json({unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}),lock:profileLock(profile)});
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/begin") {
     const input=await readJson(request); const origin=new URL(request.url).origin, rpId=new URL(request.url).hostname;
     return json(beginBiometric(profile,{...input,origin,rpId}));
   }
     if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
-    const input=await readJson(request); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/verify") {
     const input=await readJson(request); const result=await verifyBiometricCredential(profile,input);
@@ -192,7 +201,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/profile-lock/lock-device") {
     const input=await readJson(request); return json({ lock:markDeviceLocked(profile,input) });
   }
-  if (request.method === "DELETE" && url.pathname === "/api/profile-lock") return json({ lock:disableProfileLock(profile) });
+  if (request.method === "DELETE" && url.pathname === "/api/profile-lock") { requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth")); return json({ lock:disableProfileLock(profile) }); }
   if (request.method === "POST" && /^\/api\/devices\/[^/]+\/trust$/.test(url.pathname)) {
     const input = await readJson(request);
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
