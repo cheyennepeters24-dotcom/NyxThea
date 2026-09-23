@@ -21,7 +21,7 @@ function authorizeParams(input, env) {
   if (missing.length) fail(`Alexa account linking is not configured: missing ${missing.join(', ')} in the running Worker.`, 503);
   if (clientId !== env.ALEXA_OAUTH_CLIENT_ID || !redirectUris(env).includes(uri)) fail('Unrecognized Alexa client or redirect.', 400);
   if (input.get('response_type') !== 'code' || !input.get('state')) fail('Invalid authorization request.');
-  const challenge = input.get('code_challenge');
+  const challenge = input.get('code_challenge') || '';
   if (challenge && (input.get('code_challenge_method') !== 'S256' || !/^[a-zA-Z0-9_-]{43,128}$/.test(challenge))) fail('Unsupported PKCE challenge.');
   return { clientId, uri, state: input.get('state'), challenge };
 }
