@@ -24,3 +24,5 @@ jobs:
         run: npm test
       - name: Check Worker syntax
         run: npm run check
+      - name: Check interface syntax
+        run: npm run check:ui
