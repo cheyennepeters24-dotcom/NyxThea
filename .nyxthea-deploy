@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-galaxy-audible-cues
-Source commit: c5be58870db1c2d4807b4daa81896986d6ad8860
+Release: family-alpha-ios-hard-reset
+Source commit: 424e10a291904d1c22a2cf0ba382a7da280b92f9
