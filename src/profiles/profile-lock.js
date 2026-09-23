@@ -23,17 +23,17 @@ export function profileLock(profile){
     pinEnabled:Boolean(current.pinHash),
     biometricEnabled:Boolean(current.biometricEnabled),
     biometricDevices:Array.isArray(current.biometricDevices)?current.biometricDevices.map(x=>({deviceId:x.deviceId,credentialId:x.credentialId,label:x.label||null,addedAt:x.addedAt})):[],
-    lockOnReturn:current.lockOnReturn!==false,
+    stayUnlockedOnDevice:current.stayUnlockedOnDevice!==false,
     updatedAt:current.updatedAt
-  }:{profileId:profile.id,enabled:false,pinEnabled:false,biometricEnabled:false,biometricDevices:[],lockOnReturn:true};
+  }:{profileId:profile.id,enabled:false,pinEnabled:false,biometricEnabled:false,biometricDevices:[],stayUnlockedOnDevice:true};
 }
-export async function setProfilePin(profile,{pin,lockOnReturn=true}={}){
+export async function setProfilePin(profile,{pin,stayUnlockedOnDevice=true}={}){
   assertAdult(profile);
   const value=String(pin||"");
   if(!/^\d{4,8}$/.test(value))fail("PIN must be 4–8 digits.");
   const current=locks().get(profile.id)||{profileId:profile.id,biometricEnabled:false,biometricDevices:[]};
   const salt=random();
-  current.pinSalt=salt;current.pinHash=await derive(value,salt);current.enabled=true;current.lockOnReturn=Boolean(lockOnReturn);current.updatedAt=now();
+  current.pinSalt=salt;current.pinHash=await derive(value,salt);current.enabled=true;current.stayUnlockedOnDevice=stayUnlockedOnDevice!==false;current.updatedAt=now();
   locks().set(profile.id,current);return profileLock(profile);
 }
 export async function verifyProfilePin(profile,{pin}={}){
@@ -64,4 +64,33 @@ export function removeBiometricCredential(profile,{deviceId}={}){
 }
 export function disableProfileLock(profile){
   assertAdult(profile);locks().delete(profile.id);return profileLock(profile);
+}
+
+export function markDeviceUnlocked(profile,{deviceId}={}){
+  assertAdult(profile);
+  const current=locks().get(profile.id);
+  if(!current?.enabled)return {ok:true,locked:false};
+  const stable=String(deviceId||"").trim().slice(0,128);
+  if(!stable)fail("Device identifier is required.");
+  current.unlockedDevices=Array.isArray(current.unlockedDevices)?current.unlockedDevices:[];
+  if(!current.unlockedDevices.includes(stable))current.unlockedDevices.push(stable);
+  current.updatedAt=now();locks().set(profile.id,current);
+  return {ok:true,locked:false,deviceId:stable};
+}
+export function markDeviceLocked(profile,{deviceId}={}){
+  assertAdult(profile);
+  const current=locks().get(profile.id);
+  if(!current)return {ok:true,locked:false};
+  const stable=String(deviceId||"").trim().slice(0,128);
+  current.unlockedDevices=(current.unlockedDevices||[]).filter(x=>x!==stable);
+  current.updatedAt=now();locks().set(profile.id,current);
+  return {ok:true,locked:true,deviceId:stable};
+}
+export function deviceLockState(profile,{deviceId}={}){
+  assertAdult(profile);
+  const current=locks().get(profile.id);
+  if(!current?.enabled)return {enabled:false,locked:false};
+  const stable=String(deviceId||"").trim().slice(0,128);
+  const unlocked=stable&&(current.unlockedDevices||[]).includes(stable);
+  return {enabled:true,locked:!unlocked,deviceId:stable,stayUnlockedOnDevice:current.stayUnlockedOnDevice!==false};
 }
