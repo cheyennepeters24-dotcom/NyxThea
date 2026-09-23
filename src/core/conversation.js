@@ -16,7 +16,7 @@ export async function converse(ai, message, context) {
   if (/^(?:(?:hey|hi|hello)(?:\s+there)?[,.! ]*)?(?:(?:nyxthea|nyx|nixie)[,.! ]*)?(?:how are you|how's it going|how are things)\??[.! ]*$/i.test(trimmed)) {
     return { text: "I'm here and ready to talk. What's on your mind?", modelUsed: false };
   }
-  if (/\b(?:tell me (?:a little )?about (?:you|yourself)|what (?:all )?can you do|what are you capable of)\b/i.test(trimmed)) {
+  if (/\b(?:tell me (?:a little(?: bit)? )?about (?:you|yourself)|what (?:all )?can you do|what are you capable of)\b/i.test(trimmed)) {
     return { text: "I'm Nyxthea. I'm built to be a voice-first personal and household assistant: I can talk with you, remember things you choose to save, keep family profiles separate, understand household relationships, help you plan and research, and grow into connected-device features as you authorize them. I won't pretend a connection or action exists when it doesn't.", modelUsed: false };
   }
   if (!ai) return { text: "The conversation model is not connected in this environment. I can still help with available research and memory controls.", modelUsed: false };
