@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-ios-hard-reset
-Source commit: 424e10a291904d1c22a2cf0ba382a7da280b92f9
+Release: family-alpha-wake-lag-fix
+Source commit: 5932cac42505dff41472620c3901cec8a90b8550
