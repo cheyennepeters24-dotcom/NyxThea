@@ -15,6 +15,7 @@ test("a personal profile grows into a family household when Nyxthea meets a seco
   const second=createProfile({displayName:"Second"});
   saveProfileIdentity(second,{preferredName:"Second",pronunciation:"SEK-und",birthday:"2015-04-02"});
   const after=addPersonToHousehold(first,second,{relationshipToRequester:"daughter"});
+  assert.equal(householdSummary(second.id).id,after.id);
   assert.equal(after.mode,"family");
   assert.equal(after.members.length,2);
   const relation=after.relationships.find(x=>x.fromProfileId===first.id&&x.toProfileId===second.id);
