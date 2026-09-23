@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-voice-no-transcripts
-Source commit: 70d4159d34b32dabf66dc0c58a2eeb72d2dd6cbf
+Release: family-alpha-wake-greeting-speed-box-v2
+Source commit: 37c0873e534e80c7995aeb61153c530e9102b468
