@@ -4,6 +4,14 @@ import { interpretTurn, recoveryLanguage } from "../experience/conversation.js";
 import { classifyAction } from "../intelligence/agency.js";
 import { attentionDecision } from "../intelligence/attention.js";
 import { identityPolicy, spokenPrivacy } from "../privacy/identity-policy.js";
+import { assessWakeTranscript } from "../architecture/voice.js";
+test("voice activation requires a clear address and request, including profile nicknames",()=>{
+ assert.equal(assessWakeTranscript({transcript:"Hey Nixie, can you help me?",confidence:.91}).request,"can you help me");
+ assert.equal(assessWakeTranscript({transcript:"Nyxthea is a good name",confidence:.99}).safeToRespond,false);
+ assert.equal(assessWakeTranscript({transcript:"I said Nyx, not the assistant",confidence:.99}).recognized,false);
+ assert.equal(assessWakeTranscript({transcript:"NYX, what time is it?",confidence:.32}).safeToRespond,false);
+ assert.equal(assessWakeTranscript({transcript:"House Rose, tell me something",confidence:.9,authorizedNicknames:["house rose"]}).safeToRespond,true);
+});
 test("experience defaults match approved NyxThea behavior",()=>{const s=defaultExperience("p");assert.equal(s.proactiveMode,"helpful");assert.equal(s.soundMode,"minimal");assert.equal(s.lockScreenPrivacy,"private");assert.equal(rosePresentation("emergency").rose,"blue");assert.equal(rosePresentation("emergency").background,"red_glow");});
 test("conversation yields to human and preserves natural backchannels",()=>{assert.equal(interpretTurn({utterance:"Wait",assistantSpeaking:true}).interrupt,true);assert.equal(interpretTurn({utterance:"yeah",assistantSpeaking:true}).backchannel,true);assert.equal(interpretTurn({utterance:"short version",assistantSpeaking:true}).control,"shorten");});
 test("failure remains usable",()=>{assert.equal(recoveryLanguage({kind:"voice"}).fallback,"text");assert.match(recoveryLanguage({kind:"offline"}).message,/still here/);});
