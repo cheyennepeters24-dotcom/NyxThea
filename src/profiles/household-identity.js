@@ -83,6 +83,7 @@ export function saveProfileIdentity(profile,{preferredName,pronunciation,birthda
     updatedAt:now()
   };
   identities().set(profile.id,record);
+  if(parsedBirthday){profile.role=developmentalStage(parsedBirthday)==="adult"?"adult":"child";}
   ensureHousehold(profile.id);
   return profileIdentity(profile.id);
 }
