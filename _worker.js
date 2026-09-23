@@ -111,7 +111,7 @@ async function api(request, env, url) {
     return json({ device: registerDevice(profile.id, { ...input, userAgent: request.headers.get("user-agent") || input.userAgent }) }, 201);
   }
   if (request.method === "GET" && url.pathname === "/api/devices") return json({ devices: devicesFor(profile.id) });
-  if (request.method === "POST" && /^\\/api\\/devices\\/[^/]+\\/trust$/.test(url.pathname)) {
+  if (request.method === "POST" && /^\/api\/devices\/[^/]+\/trust$/.test(url.pathname)) {
     const input = await readJson(request);
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
   }
