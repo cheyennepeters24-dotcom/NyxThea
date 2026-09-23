@@ -16,7 +16,8 @@ const redirectUris = env => String(env.ALEXA_REDIRECT_URIS || '').split(',').map
 
 function authorizeParams(input, env) {
   const clientId = input.get('client_id'), uri = input.get('redirect_uri');
-  if (!env.ALEXA_OAUTH_CLIENT_ID || !env.ALEXA_OAUTH_CLIENT_SECRET || !redirectUris(env).length) fail('Alexa account linking is not configured.', 503);
+  const missing = [!env.ALEXA_OAUTH_CLIENT_ID && 'client ID', !env.ALEXA_OAUTH_CLIENT_SECRET && 'Cloudflare secret', !redirectUris(env).length && 'redirect URLs'].filter(Boolean);
+  if (missing.length) fail(`Alexa account linking is not configured: missing ${missing.join(', ')} in the running Worker.`, 503);
   if (clientId !== env.ALEXA_OAUTH_CLIENT_ID || !redirectUris(env).includes(uri)) fail('Unrecognized Alexa client or redirect.', 400);
   if (input.get('response_type') !== 'code' || !input.get('state')) fail('Invalid authorization request.');
   const challenge = input.get('code_challenge');
