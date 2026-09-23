@@ -26,7 +26,7 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -58,16 +58,17 @@ async function api(request, env, url) {
     const result = await orchestrate({ ai: env.AI, message: prompt, memories: [], conversation: [], authorization: { action: false }, mode: "normal" });
     return json({ answer: result.answer || "I'm having trouble answering right now. Please try again." });
   }
-  if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
+  if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover", "/api/auth/claim"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
   if (request.method === "POST" && url.pathname === "/api/auth/register") { authLimit(request, "register", 20, 3600000); const result = await registerAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 201, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/login") { authLimit(request, "login", 10, 900000); const result = await loginAccount(await readJson(request)); return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) }); }
+  if (request.method === "POST" && url.pathname === "/api/auth/claim") { authLimit(request, "claim", 10, 900000); const result = await claimProfileAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover") { authLimit(request, "recover", 5, 900000); const result = await recoverAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/logout") { await logoutAccount(request); return json({ ok: true }, 200, { "set-cookie": clearSessionCookie }); }
   if (request.method === "GET" && url.pathname === "/api/auth/session") { const current = await cookieProfile(request); return json({ profile: current ? profileSummary(current) : null }); }
   if (!env.NYXTHEA_STATE && request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
   const profile = await own(request, env, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
   if (request.method === "GET" && url.pathname === "/api/experience") return json({ settings: experienceSettings(profile.id), principles: NYXTHEA_PRINCIPLES, rose: rosePresentation("idle") });
-  if (request.method === "POST" && url.pathname === "/api/experience") return json({ settings: updateExperience(profile.id, await readJson(request)) });
+  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); if (profile.role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
   if (request.method === "POST" && url.pathname === "/api/experience/rose") return json({ rose: rosePresentation((await readJson(request)).state) });
   if (request.method === "POST" && url.pathname === "/api/conversation/interpret") return json(interpretTurn(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/recovery") return json(recoveryLanguage(await readJson(request)));
@@ -98,7 +99,8 @@ async function api(request, env, url) {
     const created = createProfile({ displayName: input.displayName });
     saveProfileIdentity(created, { preferredName: input.displayName, pronunciation: input.pronunciation, birthday: input.birthday, birthdayMonthDay: input.birthdayMonthDay });
     const household = addPersonToHousehold(profile, created, { relationshipToRequester: input.relationshipToRequester, relationshipLabel: input.relationshipLabel });
-    return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household }, 201);
+    const claimCode = await createProfileClaimInvite(created.id, profile.id);
+    return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household, claimCode }, 201);
   }
   if (request.method === "POST" && url.pathname === "/api/household/relationship") {
     const input = await readJson(request);
