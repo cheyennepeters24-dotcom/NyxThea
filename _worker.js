@@ -11,7 +11,7 @@ import { addBiometricCredential, beginBiometric, deviceLockState, disableProfile
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
-import { orchestrate } from "./src/core/orchestration.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
+import { orchestrate } from "./src/core/orchestration.js"; import { converseFast } from "./src/core/conversation.js"; import { buildContext } from "./src/core/context.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
 import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, MAX_MEDIA_JSON_BYTES, readJson, securityHeaders } from "./src/security.js";
 import { captureWorldFact, worldFacts, worldSummary, changedSince } from "./src/models/world-model.js";
 import { configurePerson, personModel, publicPerson, updatePreference } from "./src/models/person-model.js";
@@ -272,6 +272,25 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
+  if (request.method === "POST" && url.pathname === "/api/voice/chat") {
+    const { message } = await readJson(request);
+    if (typeof message !== "string" || !message.trim() || message.length > 1200) return json({ error: "Message must be 1–1200 characters." }, 400);
+    const prompt=message.trim();
+    recordTurn(profile.id,"user",prompt);
+    const education=educationGuidance(profile,prompt);
+    if(!education.allowed){recordTurn(profile.id,"assistant",education.response);return json({answer:education.response,type:"education_guardrail"});}
+    try{
+      const context=buildContext({conversation:recentTurns(profile.id).slice(-4)});
+      const response=await Promise.race([
+        converseFast(env.AI,prompt,context),
+        new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),6500))
+      ]);
+      if(response.text)recordTurn(profile.id,"assistant",response.text);
+      return json({answer:response.text,modelUsed:response.modelUsed,fast:true});
+    }catch{
+      return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true});
+    }
+  }
   if (request.method === "POST" && url.pathname === "/api/voice/speak") {
     if (!env.AI) return json({ error: "Natural voice is unavailable right now." }, 503);
     const { text, speaker } = await readJson(request);

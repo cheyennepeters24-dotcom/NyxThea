@@ -34,3 +34,21 @@ export async function converse(ai, message, context) {
   }
   throw lastError || new Error("Conversation model did not return a response.");
 }
+
+
+export async function converseFast(ai, message, context) {
+  const trimmed = message.trim();
+  if (/^(?:(?:hey|hi|hello)(?:\s+there)?[,.! ]*)?(?:(?:nyxthea|nyx|nixie)[,.! ]*)?(?:how are you|how's it going|how are things)\??[.! ]*$/i.test(trimmed)) {
+    return { text: "I'm here and ready to talk. What's on your mind?", modelUsed: false };
+  }
+  if (/\b(?:tell me (?:a little(?: bit)? )?about (?:you|yourself)|what (?:all )?can you do|what are you capable of)\b/i.test(trimmed)) {
+    return { text: "I'm Nyxthea. I'm your voice-first personal and household assistant. I can talk with you, remember what you choose to save, keep family profiles separate, help you plan and research, and work with connected features as you authorize them.", modelUsed: false };
+  }
+  if (!ai) return { text: "I'm having trouble reaching my conversation model right now.", modelUsed: false };
+  const system = "You are Nyxthea, a voice-first personal and household assistant. Answer in natural spoken American English. Be warm, accurate, concise, and direct. Prefer 1 to 3 short sentences unless the user clearly asks for detail. Do not claim actions, memories, sources, or connections that are not in the provided context.";
+  const prompt = `${system}\n\nRecent conversation:\n${JSON.stringify(context)}\n\nUser: ${message}`;
+  const result = await ai.run(MODEL, { prompt, max_tokens: 120 });
+  const text = extractText(result);
+  if (!text) throw new Error("Conversation model returned an empty response.");
+  return { text, modelUsed: true };
+}
