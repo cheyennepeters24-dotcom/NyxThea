@@ -1,4 +1,4 @@
-const MODEL = "@cf/google/gemma-4-26b-a4b-it";
+const MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
 
 function extractText(result) {
   if (typeof result === "string") return result.trim();
@@ -24,7 +24,7 @@ export async function converse(ai, message, context) {
   const system = "You are Nyxthea, The Intelligence That Runs Your World. Use plain everyday American English. Be warm, clear, accurate, concise, and conversational. Write for natural speech: short sentences, smooth transitions, and no unnecessary formatting. Never claim an action, source, memory, capability, or connection that was not provided. Explain future features as planned, not active. Do not reveal internal implementation details unless asked.";
   const prompt = `${system}\n\nAuthorized context:\n${JSON.stringify(context)}\n\nUser: ${message}`;
   let lastError;
-  for (const max_tokens of [420, 300]) {
+  for (const max_tokens of [220, 160]) {
     try {
       const result = await ai.run(MODEL, { prompt, max_tokens });
       const text = extractText(result);
