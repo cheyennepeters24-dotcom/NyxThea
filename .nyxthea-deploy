@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-primary-wake-fast-voice
-Source commit: df1a8912e235ecbb19722f33340c513751a5c852
+Release: family-alpha-ios-wake-crash-fix
+Source commit: 4f5915a0f9fe37462c193d2e2fe8010339b53683
