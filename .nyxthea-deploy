@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-household-voice-locks-recovery
-Source commit: a30c79674df4979a1f7450c5ddf08c9a1ae6460f
+Release: family-alpha-voice-first
+Source commit: 78e2162e35cf954cd432fe976be58af4275cc1c9
