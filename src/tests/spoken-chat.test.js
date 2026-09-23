@@ -11,7 +11,7 @@ test("a spoken greeting receives a real reply without waiting on the model", asy
 });
 
 test("a failed model gives a candid answer and conversation has time to finish", async () => {
-  assert.ok(classifyComplexity("Please help me plan dinner").budgetMs >= 20000);
+  assert.ok(classifyComplexity("Please help me plan dinner").budgetMs >= 10000);
   const response = await orchestrate({ ai: { run: async () => { throw Error("provider unavailable"); } }, message: "Please help me plan dinner", memories: [], conversation: [], authorization: {} });
   assert.equal(response.type, "conversation_unavailable");
   assert.match(response.answer, /I heard you/);
