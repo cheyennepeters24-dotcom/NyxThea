@@ -105,6 +105,17 @@ export async function completeEmailPasswordRecovery({username,code,newPassword})
   for(const [key,session] of sessions())if(session.profileId===record.profileId)sessions().delete(key);
   return {profile:profileSummary(profileById(record.profileId)),token:await makeSession(record.profileId),recoveryCode:nextCode};
 }
+export async function changeAccountPassword(profileId,{currentPassword,newPassword}={}) {
+  validPassword(newPassword);
+  await verifyAccountPassword(profileId,currentPassword);
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  if(!record)failure("Account not found.",404);
+  const salt=random();
+  record.salt=salt;record.passwordHash=await derive(newPassword,salt);
+  for(const [key,session] of sessions())if(session.profileId===profileId)sessions().delete(key);
+  return {ok:true};
+}
+
 export async function loginAccount({ username, password }) {
   const name = String(username || '').trim().toLowerCase();
   const record = accounts().get(name);
