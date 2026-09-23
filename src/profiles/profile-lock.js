@@ -15,6 +15,19 @@ const b64url=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(
 const fromB64url=value=>Uint8Array.from(atob(String(value).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(value).length+3)%4)),c=>c.charCodeAt(0));
 async function sha256(bytes){return new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));}
 function bytesEqual(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
+function derEcdsaToRaw(signature,size=32){
+  const bytes=signature instanceof Uint8Array?signature:new Uint8Array(signature);
+  if(bytes.length===size*2)return bytes;
+  if(bytes[0]!==0x30)fail("Biometric signature encoding is invalid.",401);
+  let i=2;if(bytes[1]&0x80)i=2+(bytes[1]&0x7f);
+  if(bytes[i++]!==0x02)fail("Biometric signature encoding is invalid.",401);
+  const rLen=bytes[i++],r=bytes.slice(i,i+rLen);i+=rLen;
+  if(bytes[i++]!==0x02)fail("Biometric signature encoding is invalid.",401);
+  const sLen=bytes[i++],ss=bytes.slice(i,i+sLen);
+  const trim=v=>v.length>size?v.slice(v.length-size):v;
+  const rr=trim(r),sv=trim(ss),out=new Uint8Array(size*2);
+  out.set(rr,size-rr.length);out.set(sv,size+(size-sv.length));return out;
+}
 function assertAdult(profile){
   const identity=profileIdentity(profile.id);
   const adult=identity?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions?.includes("household_admin");
@@ -91,7 +104,7 @@ export async function verifyBiometricCredential(profile,{deviceId,purpose="unloc
   if(Number(credential.algorithm)===-7){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);algorithm={name:"ECDSA",hash:"SHA-256"};}
   else if(Number(credential.algorithm)===-257){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);algorithm={name:"RSASSA-PKCS1-v1_5"};}
   else fail("Unsupported biometric credential algorithm.",400);
-  const ok=await crypto.subtle.verify(algorithm,key,fromB64url(signature),signed);if(!ok)fail("Biometric verification failed.",401);
+  const provided=Number(credential.algorithm)===-7?derEcdsaToRaw(fromB64url(signature)):fromB64url(signature);const ok=await crypto.subtle.verify(algorithm,key,provided,signed);if(!ok)fail("Biometric verification failed.",401);
   return {ok:true,purpose};
 }
 export function removeBiometricCredential(profile,{deviceId}={}){
