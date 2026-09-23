@@ -32,6 +32,7 @@ import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.j
 import { classifyAction, createJob, stopJob, jobsFor } from "./src/intelligence/agency.js";
 import { attentionDecision } from "./src/intelligence/attention.js";
 import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js";
+import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) { const profile = await identity(request, env); if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 }); enforceRateLimit(`${profile.id}:${new URL(request.url).pathname}`); recordAccess({ profileId: profile.id, action }); return profile; }
@@ -39,6 +40,23 @@ function requireAdmin(profile) { if (!profile.permissions.includes("household_ad
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
+  if (url.pathname === "/api/alexa/authorize") return alexaAuthorize(request, env);
+  if (url.pathname === "/api/alexa/token") return json(await alexaToken(request, env));
+  if (url.pathname === "/api/alexa/chat") {
+    if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+    const profile = await alexaProfile(request);
+    enforceRateLimit(`${profile.id}:alexa-chat`, { limit: 20, windowMs: 60000 });
+    const { message } = await readJson(request);
+    if (typeof message !== "string" || !message.trim() || message.length > 500) return json({ error: "Please ask a short question." }, 400);
+    // The Echo can be heard by anyone nearby. Account linking identifies the
+    // Amazon account, not the speaker. Do not expose private context or save a
+    // turn as the linked person until per-speaker authorization is implemented.
+    const prompt = message.trim();
+    const education = educationGuidance(profile, prompt);
+    if (!education.allowed) return json({ answer: education.response });
+    const result = await orchestrate({ ai: env.AI, message: prompt, memories: [], conversation: [], authorization: { action: false }, mode: "normal" });
+    return json({ answer: result.answer || "I'm having trouble answering right now. Please try again." });
+  }
   if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
   if (request.method === "POST" && url.pathname === "/api/auth/register") { authLimit(request, "register", 20, 3600000); const result = await registerAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 201, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/login") { authLimit(request, "login", 10, 900000); const result = await loginAccount(await readJson(request)); return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) }); }
