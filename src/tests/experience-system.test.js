@@ -1,0 +1,12 @@
+import test from "node:test"; import assert from "node:assert/strict";
+import { defaultExperience, rosePresentation, updateExperience } from "../experience/design-system.js";
+import { interpretTurn, recoveryLanguage } from "../experience/conversation.js";
+import { classifyAction } from "../intelligence/agency.js";
+import { attentionDecision } from "../intelligence/attention.js";
+import { identityPolicy, spokenPrivacy } from "../privacy/identity-policy.js";
+test("experience defaults match approved NyxThea behavior",()=>{const s=defaultExperience("p");assert.equal(s.proactiveMode,"helpful");assert.equal(s.soundMode,"minimal");assert.equal(s.lockScreenPrivacy,"private");assert.equal(rosePresentation("emergency").rose,"blue");assert.equal(rosePresentation("emergency").background,"red_glow");});
+test("conversation yields to human and preserves natural backchannels",()=>{assert.equal(interpretTurn({utterance:"Wait",assistantSpeaking:true}).interrupt,true);assert.equal(interpretTurn({utterance:"yeah",assistantSpeaking:true}).backchannel,true);assert.equal(interpretTurn({utterance:"short version",assistantSpeaking:true}).control,"shorten");});
+test("failure remains usable",()=>{assert.equal(recoveryLanguage({kind:"voice"}).fallback,"text");assert.match(recoveryLanguage({kind:"offline"}).message,/still here/);});
+test("agency keeps consequences under human control",()=>{const a=classifyAction({intent:"act",type:"purchase",external:true});assert.equal(a.requiresConfirmation,true);assert.equal(a.requiresAuthentication,true);});
+test("attention protects focus",()=>{assert.equal(attentionDecision({consequence:40,focusMode:true}).interrupt,false);assert.equal(attentionDecision({consequence:95,focusMode:true}).interrupt,true);});
+test("voice recognition never authenticates high consequence actions",()=>{const p=identityPolicy({voiceMatch:true,action:"purchase"});assert.equal(p.voiceAloneSufficient,false);assert.equal(p.requiresDeviceAuthentication,true);assert.equal(spokenPrivacy({sensitive:true}).askFirst,true);});
