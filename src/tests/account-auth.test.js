@@ -138,6 +138,24 @@ test('adult Settings require fresh verification and child profiles are denied', 
 });
 
 
+test('same-device household voice can hand off to a child profile without exposing adult context', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'family-voice-owner', displayName:'Parent', password:'family-voice-password-123' } });
+  const cookie=signup.headers.get('set-cookie').split(';')[0],device='family-voice-phone';
+  const met=await body(await call('/api/household/meet', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{displayName:'Kid',birthday:'2018-08-01',relationshipToRequester:'daughter'}
+  }));
+  const response=await body(await call('/api/voice/chat', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{message:'Do my homework assignment and give me the answer',speakerProfileId:met.profile.id}
+  }));
+  assert.equal(response.type,'education_guardrail');
+  assert.match(response.answer,/can't do the assignment/i);
+  assert.equal(response.speakerProfileId,met.profile.id);
+});
+
+
 test('household owner can manage integrations and save interface modules without a phantom admin flag', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'owner-ui', displayName: 'Owner', password: 'owner-ui-password-123' } });
