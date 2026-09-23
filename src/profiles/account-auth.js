@@ -54,6 +54,55 @@ export async function claimProfileAccount({ inviteCode, username, password }) {
   invite.usedAt = now(); claims().set(key, invite);
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
 }
+export async function verifyAccountPassword(profileId, password) {
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  const salt=record?.salt||"nyxthea-missing-account";
+  const expected=record?.passwordHash||await digest("nyxthea-missing-password");
+  const actual=await derive(String(password||""),salt);
+  if(!record||actual!==expected)failure("Password is incorrect.",401);
+  return {ok:true};
+}
+export function accountRecoveryStatus(profileId) {
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  return record?{username:record.username,recoveryEmail:record.recoveryEmail||null,recoveryEmailVerified:Boolean(record.recoveryEmailVerified)}:null;
+}
+function validEmail(value){
+  const email=String(value||"").trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)failure("Enter a valid email address.");
+  return email;
+}
+export async function startRecoveryEmailVerification(profileId,email){
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  if(!record)failure("Account not found.",404);
+  const value=validEmail(email),code=String(Math.floor(100000+Math.random()*900000));
+  record.pendingRecoveryEmail=value;record.pendingRecoveryEmailCodeHash=await digest(code);record.pendingRecoveryEmailExpiresAt=Date.now()+10*60*1000;
+  return {email:value,code};
+}
+export async function confirmRecoveryEmail(profileId,code){
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now())failure("Email verification code is invalid or expired.",401);
+  if(await digest(String(code||""))!==record.pendingRecoveryEmailCodeHash)failure("Email verification code is invalid or expired.",401);
+  record.recoveryEmail=record.pendingRecoveryEmail;record.recoveryEmailVerified=true;
+  delete record.pendingRecoveryEmail;delete record.pendingRecoveryEmailCodeHash;delete record.pendingRecoveryEmailExpiresAt;
+  return {recoveryEmail:record.recoveryEmail,recoveryEmailVerified:true};
+}
+export async function startEmailPasswordRecovery(username){
+  const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);
+  if(!record?.recoveryEmailVerified||!record.recoveryEmail)return {sent:false};
+  const code=String(Math.floor(100000+Math.random()*900000));
+  record.emailRecoveryCodeHash=await digest(code);record.emailRecoveryExpiresAt=Date.now()+10*60*1000;
+  return {sent:true,email:record.recoveryEmail,code};
+}
+export async function completeEmailPasswordRecovery({username,code,newPassword}){
+  const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);validPassword(newPassword);
+  if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now())failure("Email recovery code is invalid or expired.",401);
+  if(await digest(String(code||""))!==record.emailRecoveryCodeHash)failure("Email recovery code is invalid or expired.",401);
+  const salt=random(),passwordHash=await derive(newPassword,salt),nextCode=random();
+  record.salt=salt;record.passwordHash=passwordHash;record.recoveryHash=await digest(nextCode);
+  delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
+  for(const [key,session] of sessions())if(session.profileId===record.profileId)sessions().delete(key);
+  return {profile:profileSummary(profileById(record.profileId)),token:await makeSession(record.profileId),recoveryCode:nextCode};
+}
 export async function loginAccount({ username, password }) {
   const name = String(username || '').trim().toLowerCase();
   const record = accounts().get(name);
