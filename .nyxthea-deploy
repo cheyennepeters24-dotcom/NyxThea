@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-ios-wake-crash-fix
-Source commit: 4f5915a0f9fe37462c193d2e2fe8010339b53683
+Release: family-alpha-persistent-wake-stream
+Source commit: 8d0e735326560f6793f8956ac4e693d8fd326a1c
