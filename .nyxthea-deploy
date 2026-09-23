@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-voice-first
-Source commit: 78e2162e35cf954cd432fe976be58af4275cc1c9
+Release: family-alpha-cosmic-spoken-onboarding
+Source commit: 4d3100664f272ba9495b9b5c32074e411b9e70fb
