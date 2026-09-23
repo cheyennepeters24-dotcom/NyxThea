@@ -1,6 +1,37 @@
 // Paste this into the Alexa-hosted skill's lambda/index.js after account linking is configured.
 const Alexa = require('ask-sdk-core');
+const https = require('https');
 const NYX_URL = 'https://nyxthea.cheyenne-peters24.workers.dev/api/alexa/chat';
+
+function askNyx(token, message) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({ message });
+    const request = https.request(NYX_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(payload),
+        authorization: `Bearer ${token}`
+      },
+      timeout: 6200
+    }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => {
+        body += chunk;
+        if (body.length > 16000) request.destroy(new Error('NyxThea response too large'));
+      });
+      response.on('end', () => {
+        try { resolve({ status: response.statusCode, body: JSON.parse(body) }); }
+        catch (error) { reject(error); }
+      });
+      response.on('error', reject);
+    });
+    request.on('timeout', () => request.destroy(new Error('NyxThea timed out')));
+    request.on('error', reject);
+    request.end(payload);
+  });
+}
 
 function linkAccount(handlerInput) {
   return handlerInput.responseBuilder
@@ -26,16 +57,10 @@ const TalkHandler = {
     const message = Alexa.getSlotValue(input.requestEnvelope, 'question');
     if (!message) return input.responseBuilder.speak('What would you like to ask me?').reprompt('Say ask, then your question.').getResponse();
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 6200);
-      let response;
-      try {
-        response = await fetch(NYX_URL, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ message }), signal: controller.signal });
-      } finally { clearTimeout(timer); }
+      const response = await askNyx(token, message);
       if (response.status === 401) return linkAccount(input);
-      if (!response.ok) throw new Error(`NyxThea returned ${response.status}`);
-      const body = await response.json();
-      const answer = String(body.answer || 'I could not finish that answer. Please ask me again.').slice(0, 750);
+      if (response.status < 200 || response.status >= 300) throw new Error(`NyxThea returned ${response.status}`);
+      const answer = String(response.body.answer || 'I could not finish that answer. Please ask me again.').slice(0, 750);
       return input.responseBuilder.speak(answer).reprompt('I am here if you have another question.').getResponse();
     } catch (error) {
       console.error('NyxThea request failed:', error.message);
