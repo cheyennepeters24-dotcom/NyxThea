@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-noise-smoothing-and-rose
-Source commit: 688bb4028beaf2f0c2b944c6901c80681dd74b8a
+Release: family-alpha-voice-no-transcripts
+Source commit: 70d4159d34b32dabf66dc0c58a2eeb72d2dd6cbf
