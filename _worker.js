@@ -330,12 +330,71 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
   return json({ error: "Not found." }, 404);
 }
+
+const durableKey=(collection,key)=>`nyxthea-state:${collection}:${encodeURIComponent(key)}`;
+const digestHex=async value=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(value))))].map(n=>n.toString(16).padStart(2,"0")).join("");
+function sessionCookieValue(request){
+  const raw=request.headers.get("cookie")||"";
+  const pair=raw.split(";").map(x=>x.trim()).find(x=>x.startsWith("nyxthea_session="));
+  return pair?.slice("nyxthea_session=".length)||"";
+}
+async function directVoiceProfile(storage,request){
+  if(request.method!=="GET"&&request.headers.get("cookie")?.includes("nyxthea_session=")&&!sameOrigin(request))throw Object.assign(new Error("Same-origin request required."),{status:403});
+  const token=sessionCookieValue(request);if(!token)throw Object.assign(new Error("Authentication is required."),{status:401});
+  const hash=await digestHex(token);
+  const session=await storage.get(durableKey("auth_sessions",hash));
+  if(!session||session.expiresAt<=Date.now())throw Object.assign(new Error("Authentication is required."),{status:401});
+  const profile=await storage.get(durableKey("profiles",session.profileId));
+  if(!profile)throw Object.assign(new Error("Authentication is required."),{status:401});
+  const lock=await storage.get(durableKey("profile_locks",profile.id));
+  if(lock?.enabled){
+    const deviceId=request.headers.get("x-nyxthea-device")||"";
+    if(!deviceId||!(lock.unlockedDevices||[]).includes(deviceId))throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
+  }
+  return profile;
+}
 export class NyxtheaState {
-  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); }
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); }
+  mediaAllowed(profileId,path,limit){
+    const key=`${profileId}:${path}`,now=Date.now(),entry=this.mediaLimits.get(key)||{start:now,count:0};
+    if(now-entry.start>=60000){entry.start=now;entry.count=0}
+    entry.count++;this.mediaLimits.set(key,entry);return entry.count<=limit;
+  }
+  async fastMedia(request,url){
+    try{
+      const profile=await directVoiceProfile(this.ctx.storage,request);
+      if(url.pathname==="/api/voice/transcribe"){
+        if(!this.env.AI)return json({error:"Voice transcription is unavailable right now."},503);
+        if(!this.mediaAllowed(profile.id,url.pathname,75))return json({error:"Voice listener is cooling down for a moment."},429);
+        const {audio,type}=await readJson(request,MAX_MEDIA_JSON_BYTES);
+        if(typeof audio!=="string"||audio.length<100||audio.length>1400000||!/^[A-Za-z0-9+/]+={0,2}$/.test(audio)||!["audio/mp4","audio/webm","audio/wav","audio/ogg","audio/mpeg","audio/x-m4a"].includes(type))return json({error:"Please record a short audio clip and try again."},400);
+        try{
+          const result=await this.env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio,task:"transcribe",language:"en"});
+          return json({text:String(result?.text||"").trim().slice(0,4000)});
+        }catch{return json({error:"Voice transcription could not finish."},503)}
+      }
+      if(url.pathname==="/api/voice/speak"){
+        if(!this.env.AI)return json({error:"Natural voice is unavailable right now."},503);
+        if(!this.mediaAllowed(profile.id,url.pathname,60))return json({error:"Voice output is cooling down for a moment."},429);
+        const {text,speaker}=await readJson(request),spoken=String(text||"").trim();
+        if(!spoken||spoken.length>1800)return json({error:"Speech text must be 1–1800 characters."},400);
+        try{
+          const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
+          const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
+          const audio=await this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+          const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
+          return new Response(audio.body,{status:audio.status,headers});
+        }catch{return json({error:"Natural voice could not finish."},503)}
+      }
+      return json({error:"Not found."},404);
+    }catch(error){return json({error:error instanceof Error?error.message:"Something went wrong."},Number.isInteger(error?.status)?error.status:500)}
+  }
   fetch(request) {
+    const url=new URL(request.url);
+    if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
       const before = await hydrateDurableState(this.ctx.storage);
-      try { return await api(request, this.env, new URL(request.url)); }
+      try { return await api(request, this.env, url); }
       finally { await persistDurableState(this.ctx.storage, before); }
     });
     this.queue = run.catch(() => undefined);

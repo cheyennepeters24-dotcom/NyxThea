@@ -6,6 +6,7 @@ import { resetStateForTests } from '../state/store.js';
 class FakeStorage {
   rows = new Map();
   async list({ prefix }) { return new Map([...this.rows].filter(([key]) => key.startsWith(prefix))); }
+  async get(key) { const value=this.rows.get(key); return value===undefined?undefined:structuredClone(value); }
   async put(key, value) { this.rows.set(key, structuredClone(value)); }
   async delete(key) { this.rows.delete(key); }
   async transaction(callback) { return callback(this); }
