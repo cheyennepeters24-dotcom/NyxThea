@@ -75,7 +75,7 @@ function setVoiceSpeaker(profileId,name){
 async function chooseHouseholdSpeaker(){
  try{
   const d=await api("/api/household/identity"),members=d.household?.members||[];
-  const buttons=members.map(m=>{const name=m.identity?.preferredName||m.profileId===credential.id?credential.displayName:m.profileId;return `<button class="secondary household-speaker" data-speaker-id="${esc(m.profileId)}" data-speaker-name="${esc(name)}">${esc(name)}${m.profileId===credential.id?" — me":""}</button>`}).join("");
+  const buttons=members.map(m=>{const name=m.identity?.preferredName||(m.profileId===credential.id?credential.displayName:m.profileId);return `<button class="secondary household-speaker" data-speaker-id="${esc(m.profileId)}" data-speaker-name="${esc(name)}">${esc(name)}${m.profileId===credential.id?" — me":""}</button>`}).join("");
   panel("Who’s talking?",`<p>Choose who is speaking on this device. Nyx uses that person’s age/child-safety rules for voice without exposing another profile’s private memory.</p>${buttons}<button id="newHouseholdSpeaker" class="primary">Meet someone new</button>`);
   $(".household-speaker").forEach(btn=>btn.onclick=()=>{setVoiceSpeaker(btn.dataset.speakerId,btn.dataset.speakerName);shut()});
   $("#newHouseholdSpeaker").onclick=meetSomeoneNew;
@@ -86,7 +86,8 @@ async function profileLockState(){try{return await api("/api/profile-lock?device
 function bytesToB64url(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
 function b64urlToBytes(value){const b64=String(value).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(value).length+3)%4);const raw=atob(b64);return Uint8Array.from(raw,c=>c.charCodeAt(0))}
 async function setupDeviceBiometric(){
- const note=$("#profileLockNote");
+ const note=$("#profileLockNote")||$("#securityNote");
+ if(!note)return;
  if(!window.PublicKeyCredential||!navigator.credentials){note.textContent="This browser does not support device biometric/passkey unlock.";return}
  try{
   const begin=await api("/api/profile-lock/biometric/begin",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),purpose:"register"})}),userId=new TextEncoder().encode(credential.id.slice(0,64));
