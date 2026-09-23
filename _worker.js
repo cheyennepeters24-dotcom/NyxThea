@@ -195,9 +195,6 @@ async function api(request, env, url) {
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock/biometric") {
     const input=await readJson(request); return json({ lock:removeBiometricCredential(profile,input) });
   }
-  if (request.method === "POST" && url.pathname === "/api/profile-lock/unlock-device") {
-    const input=await readJson(request); return json({ unlock:markDeviceUnlocked(profile,input) });
-  }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/lock-device") {
     const input=await readJson(request); return json({ lock:markDeviceLocked(profile,input) });
   }
