@@ -65,7 +65,7 @@ export async function verifyAccountPassword(profileId, password) {
 }
 export function accountRecoveryStatus(profileId) {
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
-  return record?{username:record.username,recoveryEmail:record.recoveryEmail||null,recoveryEmailVerified:Boolean(record.recoveryEmailVerified)}:null;
+  return record?{username:record.username,recoveryEmail:record.recoveryEmail||null,recoveryEmailVerified:Boolean(record.recoveryEmailVerified),recoveryProvider:"user_chosen_email"}:null;
 }
 function validEmail(value){
   const email=String(value||"").trim().toLowerCase();
