@@ -5,7 +5,7 @@ assets = { directory = "./public", binding = "ASSETS" }
 
 [vars]
 ALEXA_OAUTH_CLIENT_ID = "nyxthea-alexa"
-ALEXA_REDIRECT_URIS = "https://alexa.amazon.co.jp/api/skill/link/M3C73GANFMTL0I,https://layla.amazon.com/api/skill/link/M3C73GANFMTL0I,https://pitangui.amazon.com/api/skill/link/M3C73GANFMTL0I"
+ALEXA_REDIRECT_URIS = "https://pitangui.amazon.com/api/skill/link/M36KJYINIV5UBM,https://alexa.amazon.co.jp/api/skill/link/M36KJYINIV5UBM,https://layla.amazon.com/api/skill/link/M36KJYINIV5UBM"
 
 [[durable_objects.bindings]]
 name = "NYXTHEA_STATE"
