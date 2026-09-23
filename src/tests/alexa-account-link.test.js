@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { NyxtheaState } from '../../_worker.js';
-import { resetStateForTests } from '../state/store.js';
+import { resetStateForTests, table } from '../state/store.js';
 
 class Storage {
   rows = new Map();
@@ -46,6 +46,7 @@ test('Alexa linking requires consent, registered redirect, client secret and one
   const answer = await call('/api/alexa/chat', { method: 'POST', headers: { authorization: `Bearer ${access_token}`, 'content-type': 'application/json' }, body: JSON.stringify({ message: 'Hello' }) });
   assert.equal(answer.status, 200);
   assert.ok((await answer.json()).answer);
+  assert.equal(table('conversation_turns').size, 0, 'shared Echo must not write to the linked person’s private conversation');
   const refresh = await tokenCall({ grant_type: 'refresh_token', refresh_token });
   assert.equal(refresh.status, 200);
   assert.equal((await tokenCall({ grant_type: 'refresh_token', refresh_token })).status, 400);

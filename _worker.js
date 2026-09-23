@@ -48,12 +48,13 @@ async function api(request, env, url) {
     enforceRateLimit(`${profile.id}:alexa-chat`, { limit: 20, windowMs: 60000 });
     const { message } = await readJson(request);
     if (typeof message !== "string" || !message.trim() || message.length > 500) return json({ error: "Please ask a short question." }, 400);
-    const prompt = message.trim(), memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
-    recordTurn(profile.id, "user", prompt);
+    // The Echo can be heard by anyone nearby. Account linking identifies the
+    // Amazon account, not the speaker. Do not expose private context or save a
+    // turn as the linked person until per-speaker authorization is implemented.
+    const prompt = message.trim();
     const education = educationGuidance(profile, prompt);
-    if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ answer: education.response }); }
-    const result = await orchestrate({ ai: env.AI, message: prompt, memories: memory.retrieve(prompt), conversation: recentTurns(profile.id), authorization: { action: false }, mode: conversationState(profile.id).mode });
-    if (result.answer) recordTurn(profile.id, "assistant", result.answer);
+    if (!education.allowed) return json({ answer: education.response });
+    const result = await orchestrate({ ai: env.AI, message: prompt, memories: [], conversation: [], authorization: { action: false }, mode: "normal" });
     return json({ answer: result.answer || "I'm having trouble answering right now. Please try again." });
   }
   if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
