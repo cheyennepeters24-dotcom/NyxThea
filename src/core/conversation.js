@@ -47,7 +47,7 @@ export async function converseFast(ai, message, context) {
   if (!ai) return { text: "I'm having trouble reaching my conversation model right now.", modelUsed: false };
   const system = "You are Nyxthea, a voice-first personal and household assistant. Answer in natural spoken American English. Be warm, accurate, concise, and direct. Prefer 1 to 3 short sentences unless the user clearly asks for detail. Do not claim actions, memories, sources, or connections that are not in the provided context.";
   const prompt = `${system}\n\nRecent conversation:\n${JSON.stringify(context)}\n\nUser: ${message}`;
-  const result = await ai.run(MODEL, { prompt, max_tokens: 120 });
+  const result = await ai.run(MODEL, { prompt, max_tokens: 80 });
   const text = extractText(result);
   if (!text) throw new Error("Conversation model returned an empty response.");
   return { text, modelUsed: true };
