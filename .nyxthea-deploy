@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-direct-voice-security-interface
-Source commit: 6643c566e9a2b844d01d8ab3d6a5d9e875dfb086
+Release: family-alpha-blocker-sweep
+Source commit: 7b9c30a5f9714d89f9fed6fa93464b134091013e
