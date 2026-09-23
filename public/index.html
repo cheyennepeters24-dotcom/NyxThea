@@ -63,21 +63,35 @@ async function setupDeviceBiometric(){
  const note=$("#profileLockNote");
  if(!window.PublicKeyCredential||!navigator.credentials){note.textContent="This browser does not support device biometric/passkey unlock.";return}
  try{
-  const challenge=crypto.getRandomValues(new Uint8Array(32)),userId=new TextEncoder().encode(credential.id.slice(0,64));
-  const created=await navigator.credentials.create({publicKey:{challenge,rp:{name:"NyxThea"},user:{id:userId,name:credential.displayName||"NyxThea user",displayName:credential.displayName||"NyxThea user"},pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required",residentKey:"discouraged"},timeout:60000,attestation:"none"}});
+  const begin=await api("/api/profile-lock/biometric/begin",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),purpose:"register"})}),userId=new TextEncoder().encode(credential.id.slice(0,64));
+  const created=await navigator.credentials.create({publicKey:{challenge:b64urlToBytes(begin.challenge),rp:{name:"NyxThea"},user:{id:userId,name:credential.displayName||"NyxThea user",displayName:credential.displayName||"NyxThea user"},pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required",residentKey:"discouraged"},timeout:60000,attestation:"none"}});
   if(!created)throw Error("Device biometric setup was cancelled.");
-  await api("/api/profile-lock/biometric",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),credentialId:bytesToB64url(created.rawId),label:navigator.platform||"This device"})});
+  const publicKey=created.response.getPublicKey?.(),algorithm=created.response.getPublicKeyAlgorithm?.();
+  if(!publicKey||!algorithm)throw Error("This browser cannot register a secure device passkey for NyxThea yet.");
+  await api("/api/profile-lock/biometric",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),credentialId:bytesToB64url(created.rawId),publicKey:bytesToB64url(publicKey),algorithm,label:navigator.platform||"This device",clientDataJSON:bytesToB64url(created.response.clientDataJSON)})});
   localStorage.setItem("nyxtheaBiometricCredential:"+credential.id,bytesToB64url(created.rawId));
-  note.textContent="Device biometric/passkey unlock is enabled. This device is now unlocked and will stay that way until you lock it.";
+  note.textContent="Device biometric/passkey unlock is enabled. Nyx stores the public credential only—not your face or fingerprint.";
  }catch(e){note.textContent=e.message||"Could not enable device biometric unlock."}
 }
-async function unlockWithBiometric(){
+async function unlockWithBiometric(purpose="unlock"){
  const saved=localStorage.getItem("nyxtheaBiometricCredential:"+credential.id);
  if(!saved||!window.PublicKeyCredential||!navigator.credentials)throw Error("Device biometric unlock is not set up here.");
- const assertion=await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:"public-key",id:b64urlToBytes(saved)}],userVerification:"required",timeout:60000}});
+ const begin=await api("/api/profile-lock/biometric/begin",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),purpose})});
+ const assertion=await navigator.credentials.get({publicKey:{challenge:b64urlToBytes(begin.challenge),allowCredentials:[{type:"public-key",id:b64urlToBytes(saved)}],userVerification:"required",timeout:60000}});
  if(!assertion)throw Error("Device biometric unlock was cancelled.");
- await api("/api/profile-lock/unlock-device",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId()})});
- return true;
+ const d=await api("/api/profile-lock/biometric/verify",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),purpose,credentialId:saved,clientDataJSON:bytesToB64url(assertion.response.clientDataJSON),authenticatorData:bytesToB64url(assertion.response.authenticatorData),signature:bytesToB64url(assertion.response.signature)})});
+ if(purpose==="settings"&&d.authorization?.token)settingsAuthToken=d.authorization.token;
+ return d;
+}
+async function openSettingsVerified(){
+ if(!credential){unlock();return}
+ settingsAuthToken=null;
+ try{await profileLockState()}catch(e){panel("Settings",`<p>${esc(e.message)}</p>`);return}
+ panel("Verify adult access",'<p>Settings are protected every time they are opened so children or guests cannot change household permissions or security.</p><input id="settingsPin" class="field" inputmode="numeric" maxlength="8" placeholder="Adult PIN"><button id="settingsPinBtn" class="primary">Verify with PIN</button><input id="settingsPassword" class="field" type="password" autocomplete="current-password" placeholder="Account password"><button id="settingsPasswordBtn" class="secondary">Verify with password</button><button id="settingsBioBtn" class="secondary">Use Face ID / Touch ID / device biometric</button><p id="settingsVerifyNote" class="small"></p>');
+ const note=()=>$("#settingsVerifyNote");
+ $("#settingsPinBtn").onclick=async()=>{try{const d=await api("/api/settings/verify-pin",{method:"POST",body:JSON.stringify({pin:$("#settingsPin").value,deviceId:nyxDeviceId()})});settingsAuthToken=d.authorization.token;await accountSettings()}catch(e){note().textContent=e.message}};
+ $("#settingsPasswordBtn").onclick=async()=>{try{const d=await api("/api/settings/verify-password",{method:"POST",body:JSON.stringify({password:$("#settingsPassword").value,deviceId:nyxDeviceId()})});settingsAuthToken=d.authorization.token;await accountSettings()}catch(e){note().textContent=e.message}};
+ $("#settingsBioBtn").onclick=async()=>{try{await unlockWithBiometric("settings");await accountSettings()}catch(e){note().textContent=e.message}};
 }
 async function profileLockSettings(){
  try{
