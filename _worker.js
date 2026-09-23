@@ -388,12 +388,12 @@ export class NyxtheaState {
         }catch{return json({error:"Voice transcription could not finish."},503)}
       }
       if(url.pathname==="/api/voice/chat"){
-        if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true},503);
         if(!this.mediaAllowed(profile.id,url.pathname,60))return json({answer:"Give me a second and ask that again.",degraded:true,fast:true},429);
         const {message,speakerProfileId}=await readJson(request),prompt=String(message||"").trim();
         if(!prompt||prompt.length>1200)return json({error:"Message must be 1–1200 characters."},400);
         const speaker=await directHouseholdSpeaker(this.ctx.storage,profile,speakerProfileId);
         const education=educationGuidance(speaker,prompt); if(!education.allowed)return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});
+        if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true,speakerProfileId:speaker.id},503);
         try{
           const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),4000))]);
           return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
