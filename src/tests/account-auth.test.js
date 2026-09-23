@@ -167,6 +167,12 @@ test('household owner can manage integrations and save interface modules without
     data:{ kind:'amazon_alexa_echo', permissions:[] }
   });
   assert.equal(integration.status, 201);
+  const permission = await body(await call('/api/permissions/check', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{action:'integration_management'}
+  }));
+  assert.equal(permission.allowed, true);
+  assert.equal(permission.required, 'owner_admin_only');
 
   const saved = await body(await call('/api/experience', {
     method:'POST', cookie, headers:{'x-nyxthea-device':device},
