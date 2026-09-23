@@ -24,6 +24,7 @@ import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
+import { table } from "./src/state/store.js";
 import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
@@ -131,6 +132,22 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
+  if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
+    if (!env.AI) return json({ error: "Voice transcription is unavailable right now." }, 503);
+    const { audio, type } = await readJson(request, MAX_MEDIA_JSON_BYTES);
+    if (typeof audio !== "string" || audio.length < 100 || audio.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(audio) || !["audio/mp4", "audio/webm", "audio/wav", "audio/ogg", "audio/mpeg", "audio/x-m4a"].includes(type)) return json({ error: "Please record a short audio clip and try again." }, 400);
+    const usage = table("voice_transcription_limits"), day = new Date().toISOString().slice(0, 10), key = `${profile.id}:${day}`;
+    const count = usage.get(key) || 0, totalKey = `all:${day}`, total = usage.get(totalKey) || 0;
+    if (count >= 30) return json({ error: "The daily voice limit has been reached. Please type your message for now." }, 429);
+    if (total >= 80) return json({ error: "Voice input is resting for today. Please type your message for now." }, 429);
+    usage.set(key, count + 1);
+    usage.set(totalKey, total + 1);
+    try {
+      const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" });
+      const text = String(result?.text || "").trim().slice(0, 4000);
+      return json({ text });
+    } catch { return json({ error: "Voice transcription could not finish. Please try again or type your message." }, 503); }
+  }
   if (request.method === "POST" && url.pathname === "/api/voice/nicknames") return json({ profile: profileSummary(setWakeNicknames(profile, (await readJson(request)).nicknames)) });
   if (request.method === "POST" && url.pathname === "/api/voice/wake") { const result = assessWakeContext({ ...(await readJson(request)), authorizedNicknames: profile.wakeNicknames || [] }); if (result.safeToRespond) transitionVoice(profile.id, "wake"); return json({ ...result, session: voiceState(profile.id) }); }
   if (request.method === "POST" && url.pathname === "/api/voice/state") return json({ session: transitionVoice(profile.id, (await readJson(request)).event) });

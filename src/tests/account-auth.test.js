@@ -56,3 +56,21 @@ test('recovery rotates the one-time code, password, and sessions', async () => {
   assert.equal((await call('/api/auth/login', { method: 'POST', data: { username: 'alice', password: 'original-long-password' } })).status, 401);
   assert.equal((await call('/api/auth/login', { method: 'POST', data: { username: 'alice', password: 'replacement-long-password' } })).status, 200);
 });
+
+test('voice transcription needs a signed-in session and bounds the uploaded clip', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'voice-tester', displayName: 'Voice', password: 'voice-test-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const audio = 'A'.repeat(400);
+  const clip = { audio, type: 'audio/mp4' };
+  let calls = 0;
+  env.AI = { run: async (model, input) => { calls++; assert.equal(model, '@cf/openai/whisper-large-v3-turbo'); assert.equal(input.audio, audio); return { text: 'Hello Nyxthea' }; } };
+  try {
+    assert.equal((await call('/api/voice/transcribe', { method: 'POST', data: clip })).status, 401);
+    assert.equal((await call('/api/voice/transcribe', { method: 'POST', cookie, origin: 'https://evil.test', data: clip })).status, 403);
+    assert.equal((await call('/api/voice/transcribe', { method: 'POST', cookie, data: { ...clip, type: 'text/plain' } })).status, 400);
+    assert.deepEqual(await body(await call('/api/voice/transcribe', { method: 'POST', cookie, data: clip })), { text: 'Hello Nyxthea' });
+    assert.equal(calls, 1);
+    assert.ok(![...storage.rows.keys()].some(key => key.includes(audio)));
+  } finally { delete env.AI; }
+});
