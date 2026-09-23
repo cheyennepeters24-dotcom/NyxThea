@@ -106,9 +106,13 @@ This Worker now includes testable registries and APIs for profiles and profile c
 
 External providers remain disconnected: there is no hardware access, OAuth provider, TTS/STT provider, emergency dispatch, health-data source, vehicle telemetry source, pet-system source, or third-party account connection. An integration authorization record is not an external connection and never activates provider actions.
 
+## Account sign-in and first run
+
+The published Worker offers username/password accounts with PBKDF2 password hashes, HTTP-only secure session cookies, durable account/session storage, same-origin checks on account changes, and a one-time recovery code that rotates after use. New accounts get only their own ordinary profile; registration never claims the pre-existing owner profile. The preferred name, pronunciation cue, communication style, and first-run completion save to the profile's durable experience settings. Browser speech recognition and synthesis remain dependent on device/browser support and may pronounce names differently despite the stored cue. Keep the recovery code private: there is no email identity verification or email reset provider connected.
+
 ## Local-development security model
 
-All protected API routes now require both `x-nyxthea-profile` and `x-nyxthea-profile-token`. There is no anonymous owner fallback. For this temporary, isolate-local prototype, first call `POST /api/auth/bootstrap` with the value of the Worker environment variable `NYXTHEA_DEV_BOOTSTRAP_TOKEN`; it returns the local owner credential. This bootstrap mechanism is **not production authentication** and must be replaced with a durable verified identity/session system before deployment.
+All protected API routes now require both `x-nyxthea-profile` and `x-nyxthea-profile-token`. There is no anonymous owner fallback. For this temporary, isolate-local prototype, first call `POST /api/auth/bootstrap` with the value of the Worker environment variable `NYXTHEA_DEV_BOOTSTRAP_TOKEN`; it returns the local owner credential. The bootstrap route works only without the Durable Object binding for local tests; the published Worker uses password accounts and server sessions. Username ownership is established by the chosen password and recovery code, not by verified email identity.
 
 Profile grants are immediately enforced and revocable by the grant creator, a household administrator, or the grant recipient. Wellness writes require an active consent record; revocation blocks subsequent consent-gated writes. Presence and emergency evidence must originate from a matching registered endpoint owned by the authenticated profile, include fresh timestamps and safe confidence values, and emergency evidence also requires a unique event id for replay protection.
 
@@ -130,5 +134,5 @@ Capability states use `available`, `connected`, `unavailable`, `simulated`, `req
 
 ### Production boundary
 
-Profiles, permissions/grants, person settings/preferences, access-audit records, scoped memories, emergency policies, and basic emergency incidents persist in Cloudflare Durable Object SQLite storage. Development credentials and rate limits still require verified identity, distributed enforcement, and credential rotation/recovery before production use with real personal data. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
+Profiles, permissions/grants, person settings/preferences, access-audit records, scoped memories, emergency policies, and basic emergency incidents persist in Cloudflare Durable Object SQLite storage. Password account sessions and recovery codes persist, but email identity verification and external account recovery are not connected. General API rate limits outside account authentication remain isolate-local and need distributed enforcement before sensitive production use. No hardware, emergency dispatch, financial system, music service, health source, vehicle telemetry, contact/message source, or smart-home provider is connected.
 Cloudflare deployment connected
