@@ -4,7 +4,6 @@ import { profileById } from '../profiles/profiles.js';
 
 const enc = new TextEncoder();
 const codes = () => table('alexa_oauth_codes');
-const flows = () => table('alexa_oauth_flows');
 const tokens = () => table('alexa_oauth_tokens');
 const expiry = { code: 5 * 60 * 1000, access: 60 * 60 * 1000, refresh: 30 * 24 * 60 * 60 * 1000 };
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -26,8 +25,8 @@ function authorizeParams(input, env) {
   return { clientId, uri, state: input.get('state'), challenge };
 }
 
-function linkingPage(params, profile, flowToken, error = '') {
-  const fields = [['client_id', params.clientId], ['redirect_uri', params.uri], ['response_type', 'code'], ['state', params.state], ['code_challenge', params.challenge || ''], ['code_challenge_method', params.challenge ? 'S256' : ''], ['flow_nonce', flowToken]]
+function linkingPage(params, profile, error = '') {
+  const fields = [['client_id', params.clientId], ['redirect_uri', params.uri], ['response_type', 'code'], ['state', params.state], ['code_challenge', params.challenge || ''], ['code_challenge_method', params.challenge ? 'S256' : '']]
     .map(([name, value]) => `<input type="hidden" name="${name}" value="${escape(value)}">`).join('');
   return formReply(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect NyxThea to Alexa</title><style>body{font:18px system-ui;background:#081328;color:#eef5ff;max-width:440px;margin:12vh auto;padding:20px}h1{font:36px Georgia,serif}input,button{box-sizing:border-box;width:100%;padding:14px;margin:8px 0;border-radius:10px;font-size:17px}button{background:#3688f5;color:white;border:0}p{line-height:1.5}.error{color:#ffb7a9}</style><h1>Connect NyxThea to Alexa</h1><p>Allow your Echo to speak with your NyxThea profile${profile ? `, ${escape(profile.displayName)}` : ''}. You can unlink it later in the Alexa app.</p>${error ? `<p class="error">${escape(error)}</p>` : ''}<form method="post" action="/api/alexa/authorize">${fields}${profile ? '' : '<label>NyxThea username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label>'}<button name="approve" value="yes">Connect my profile</button></form></html>`);
 }
@@ -35,26 +34,19 @@ function linkingPage(params, profile, flowToken, error = '') {
 export async function alexaAuthorize(request, env) {
   if (request.method === 'GET') {
     const params = authorizeParams(new URL(request.url).searchParams, env);
-    const flowToken = random();
-    flows().set(await hash(flowToken), { ...params, expiresAt: Date.now() + 10 * 60 * 1000 });
-    return linkingPage(params, await cookieProfile(request), flowToken);
+    return linkingPage(params, await cookieProfile(request));
   }
   if (request.method !== 'POST') fail('Method not allowed.', 405);
   const origin = request.headers.get('origin');
   if (origin && origin !== 'null' && origin !== new URL(request.url).origin) fail('Same-origin request required.', 403);
   const form = await request.formData(), params = authorizeParams(form, env);
-  const flowToken = form.get('flow_nonce');
-  const flowKey = typeof flowToken === 'string' && /^[a-f0-9-]{60,}$/.test(flowToken) ? await hash(flowToken) : null;
-  const flow = flowKey && flows().get(flowKey);
-  if (!flow || flow.expiresAt <= Date.now() || flow.clientId !== params.clientId || flow.uri !== params.uri || flow.state !== params.state || flow.challenge !== params.challenge) fail('Please restart account linking in the Alexa app.', 403);
   if (form.get('approve') !== 'yes') fail('Explicit consent is required.', 403);
   let profile = await cookieProfile(request);
   if (!profile) {
     authLimit(request, 'alexa-login', 10, 15 * 60 * 1000);
     try { profile = (await loginAccount({ username: form.get('username'), password: form.get('password') })).profile; }
-    catch { return linkingPage(params, null, flowToken, 'Those sign-in details did not work. Please try again.'); }
+    catch { return linkingPage(params, null, 'Those sign-in details did not work. Please try again.'); }
   }
-  flows().delete(flowKey);
   const code = random();
   codes().set(await hash(code), { profileId: profile.id, clientId: params.clientId, uri: params.uri, challenge: params.challenge, expiresAt: Date.now() + expiry.code });
   const dest = new URL(params.uri);
