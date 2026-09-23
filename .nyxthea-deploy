@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-unblock-voice-media
-Source commit: 275153992629f1e6ed98aadd8d9cd795f0caacf0
+Release: family-alpha-direct-voice-security-interface
+Source commit: 6643c566e9a2b844d01d8ab3d6a5d9e875dfb086
