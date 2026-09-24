@@ -91,6 +91,7 @@ export async function addBiometricCredential(profile,{deviceId,credentialId,publ
   if(!d||!c||!p||!clientDataJSON||!authenticatorData)fail("Device biometric credential is incomplete.");
   if(![-7,-257].includes(alg))fail("Unsupported biometric credential algorithm.");
   if(p.length>8192)fail("Biometric public key is too large.");
+  try{const spki=fromB64url(p,11000);if(alg===-7)await crypto.subtle.importKey("spki",spki,{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);else await crypto.subtle.importKey("spki",spki,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);}catch{fail("Biometric public key is invalid.");}
   const challenge=readChallenge(profile,d,"register");parseClientData(clientDataJSON,challenge,"webauthn.create");
   const auth=fromB64url(authenticatorData);if(auth.length<37||auth.length>16384)fail("Biometric registration response is invalid.",401);
   const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric registration is for a different site.",401);
