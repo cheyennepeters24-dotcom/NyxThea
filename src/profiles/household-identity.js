@@ -51,7 +51,7 @@ export function developmentalStage(birthday){
 }
 function normalizeMembership(profileId){
   const active=[...memberships()].filter(([,m])=>m.profileId===profileId&&m.active!==false),valid=active.filter(([,m])=>households().has(m.householdId));
-  const ranked=[...valid].sort(([aKey,a],[bKey,b])=>{const aHouse=households().get(a.householdId),bHouse=households().get(b.householdId);const aScore=(aKey===\`${a.householdId}:${profileId}\`?2:0)+(aHouse?.createdBy===profileId?1:0),bScore=(bKey===\`${b.householdId}:${profileId}\`?2:0)+(bHouse?.createdBy===profileId?1:0);return bScore-aScore||aKey.localeCompare(bKey);}),chosen=ranked[0]||null;
+  const ranked=[...valid].sort(([aKey,a],[bKey,b])=>{const aHouse=households().get(a.householdId),bHouse=households().get(b.householdId);const aScore=(aKey===`${a.householdId}:${profileId}`?2:0)+(aHouse?.createdBy===profileId?1:0),bScore=(bKey===`${b.householdId}:${profileId}`?2:0)+(bHouse?.createdBy===profileId?1:0);return bScore-aScore||aKey.localeCompare(bKey);}),chosen=ranked[0]||null;
   for(const [key] of active)if(!chosen||key!==chosen[0])memberships().delete(key);
   if(chosen){const memberIds=new Set(list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).map(m=>m.profileId));for(const [key,relationship] of relationships())if((relationship.fromProfileId===profileId||relationship.toProfileId===profileId)&&(!memberIds.has(relationship.fromProfileId)||!memberIds.has(relationship.toProfileId)))relationships().delete(key);return chosen[1];}
   return null;
