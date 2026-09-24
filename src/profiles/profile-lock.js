@@ -14,7 +14,7 @@ const random=()=>`${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g,"")}`
 const b64url=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 const fromB64url=value=>Uint8Array.from(atob(String(value).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(value).length+3)%4)),c=>c.charCodeAt(0));
 async function sha256(bytes){return new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));}
-function bytesEqual(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
+function bytesEqual(a,b){if(a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0;}\nfunction constantTimeEqual(a,b){const left=String(a||""),right=String(b||"");if(left.length!==right.length)return false;let diff=0;for(let i=0;i<left.length;i++)diff|=left.charCodeAt(i)^right.charCodeAt(i);return diff===0;}
 function derEcdsaToRaw(signature,size=32){
   const bytes=signature instanceof Uint8Array?signature:new Uint8Array(signature);
   if(bytes.length===size*2)return bytes;
@@ -59,7 +59,7 @@ export async function verifyProfilePin(profile,{pin}={}){
   const current=locks().get(profile.id);
   if(!current?.enabled||!current.pinHash)fail("PIN unlock is not enabled.",409);
   const candidate=await derive(String(pin||""),current.pinSalt);
-  if(candidate!==current.pinHash)fail("Incorrect PIN.",401);
+  if(!constantTimeEqual(candidate,current.pinHash))fail("Incorrect PIN.",401);
   return {ok:true};
 }
 export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={}){
