@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetStateForTests } from "../state/store.js";
 import { createProfile } from "../profiles/profiles.js";
-import { isSystemAdmin, provisionSystemAdmin, recordSystemAdminAction, requireSystemAdmin, revokeSystemAdmin, systemAdminAudit } from "../security/system-admin.js";
+import { ensureInitialSystemAdmin, isSystemAdmin, provisionSystemAdmin, recordSystemAdminAction, requireSystemAdmin, revokeSystemAdmin, systemAdminAudit } from "../security/system-admin.js";
 
 test.beforeEach(()=>resetStateForTests());
 
@@ -40,7 +40,6 @@ test("revocation immediately removes system admin authority",()=>{
 
 
 test("trusted bootstrap provisions only the exact initial profile and only when no active admin exists",()=>{
-  resetStore();
   const owner=createProfile({displayName:"Bootstrap Owner",permissions:["household_admin"]});
   const other=createProfile({displayName:"Other"});
   assert.equal(ensureInitialSystemAdmin(other,owner.id),null);
