@@ -303,7 +303,7 @@ async function api(request, env, url) {
       const context=buildContext({conversation:recentTurns(profile.id).slice(-4)});
       const response=await Promise.race([
         converseFast(env.AI,prompt,context),
-        new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),4500))
+        new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),8000))
       ]);
       if(response.text)recordTurn(profile.id,"assistant",response.text);
       return json({answer:response.text,modelUsed:response.modelUsed,fast:true});
