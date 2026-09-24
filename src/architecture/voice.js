@@ -25,7 +25,8 @@ export function assessWakeTranscript({transcript="",confidence=0,authorizedNickn
   const match=spoken.match(new RegExp(`^(?:hey[ ,]+)?${escaped}(?:[ ,.!?]+|$)(.*)$`,"i"));
   if(!match)continue;
   const request=match[1].trim();
-  const quotedOrCorrective=/\b(?:said|say|called|named|name is|not the assistant|don't call|do not call)\b/i.test(request);
+  if(!request&&Number(confidence)>=.65)return {recognized:true,safeToRespond:true,request:"",response:"session_may_start"};
+  const quotedOrCorrective=/\b(?:said|say|called|named|name is|not the assistant|don't call|do not call)\b/i.test(request)||/^is\s+(?:a|an|the)\b/i.test(request);
   const safeToRespond=Number(confidence)>=.65&&!quotedOrCorrective;
   return {recognized:safeToRespond,safeToRespond,request:safeToRespond?request:"",response:safeToRespond?"session_may_start":"remain_quiet"};
  }
