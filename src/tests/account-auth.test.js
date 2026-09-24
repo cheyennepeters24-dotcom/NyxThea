@@ -208,13 +208,13 @@ test('real household owner can revoke a member grant without a legacy admin flag
   const info=await body(signup),cookie=signup.headers.get('set-cookie').split(';')[0],device='grant-owner-phone';
   assert.deepEqual(info.profile.permissions,[]);
   const met=await body(await call('/api/household/meet',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{displayName:'Member',birthday:'2000-01-01',relationshipToRequester:'child'}}));
-  storage.rows.set('nyxthea-state:profile_grants:grant_household_member',{
+  table('profile_grants').set('grant_household_member',{
     id:'grant_household_member',from:met.profile.id,to:'external-recipient',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
   });
   const revoked=await call('/api/profiles/grants/grant_household_member',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
   assert.equal(revoked.status,200);
   assert.equal((await body(revoked)).revoked,true);
-  assert.equal(storage.rows.get('nyxthea-state:profile_grants:grant_household_member').revokedBy,info.profile.id);
+  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,info.profile.id);
 });
 
 test('device trust changes require fresh Settings verification', async () => {
