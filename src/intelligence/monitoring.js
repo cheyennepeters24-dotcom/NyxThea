@@ -98,7 +98,8 @@ export function recordCiBuildRun({runId,repository,branch,sha,status,conclusion,
   if(!allowedStatus.has(cleanStatus)||!allowedConclusion.has(cleanConclusion))throw Object.assign(new Error("CI status or conclusion is invalid."),{status:400});
   if(!Array.isArray(jobs))throw Object.assign(new Error("CI jobs must be an array."),{status:400});
   const cleanJobs=jobs.slice(0,16).map(job=>{const name=String(job?.name||"").trim().slice(0,120),result=String(job?.result||"unknown").trim();if(!name||!allowedResult.has(result))throw Object.assign(new Error("CI job report is invalid."),{status:400});return{name,result}});
-  const record={runId:stableId,repository:String(repository||"").trim().slice(0,180),branch:String(branch||"").trim().slice(0,180),sha:String(sha||"").trim().slice(0,64),status:cleanStatus,conclusion:cleanConclusion,url:String(url||"").trim().slice(0,500),jobs:cleanJobs,receivedAt:now()};
+  const cleanUrl=String(url||"").trim().slice(0,500);if(cleanUrl){let parsed;try{parsed=new URL(cleanUrl)}catch{throw Object.assign(new Error("CI run URL is invalid."),{status:400})}if(parsed.protocol!=="https:"||parsed.hostname!=="github.com")throw Object.assign(new Error("CI run URL must be a GitHub HTTPS URL."),{status:400});}
+  const record={runId:stableId,repository:String(repository||"").trim().slice(0,180),branch:String(branch||"").trim().slice(0,180),sha:String(sha||"").trim().slice(0,64),status:cleanStatus,conclusion:cleanConclusion,url:cleanUrl,jobs:cleanJobs,receivedAt:now()};
   table("ci_build_runs").set(stableId,record);
   const rows=list("ci_build_runs").sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)));
   for(const stale of rows.slice(50))table("ci_build_runs").delete(stale.runId);
