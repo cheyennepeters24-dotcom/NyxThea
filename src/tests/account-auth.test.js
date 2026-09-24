@@ -157,6 +157,18 @@ test('same-device household voice can hand off to a child profile without exposi
   assert.equal(response.speakerProfileId,met.profile.id);
 });
 
+test('child voice session cannot claim an adult household speaker', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'voice-parent-boundary', displayName:'Parent', password:'voice-parent-password-123' } });
+  const parentCookie=signup.headers.get('set-cookie').split(';')[0];
+  const parent=(await body(signup)).profile;
+  const met=await body(await call('/api/household/meet', { method:'POST', cookie:parentCookie, headers:{'x-nyxthea-device':'parent-phone'}, data:{displayName:'Kid',birthday:'2018-08-01',relationshipToRequester:'daughter'} }));
+  const claimed=await call('/api/auth/claim', { method:'POST', data:{inviteCode:met.claimCode,username:'voice-child-boundary',password:'voice-child-password-123'} });
+  const childCookie=claimed.headers.get('set-cookie').split(';')[0];
+  const response=await call('/api/voice/chat', { method:'POST', cookie:childCookie, headers:{'x-nyxthea-device':'child-phone'}, data:{message:'Do my homework assignment and give me the answer',speakerProfileId:parent.id} });
+  assert.equal(response.status,403);
+});
+
 
 test('household owner can manage integrations and save interface modules without a phantom admin flag', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
