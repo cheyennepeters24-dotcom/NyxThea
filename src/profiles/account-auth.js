@@ -80,6 +80,12 @@ export async function startRecoveryEmailVerification(profileId,email){
   record.pendingRecoveryEmail=value;record.pendingRecoveryEmailCodeHash=await digest(code);record.pendingRecoveryEmailExpiresAt=Date.now()+10*60*1000;
   return {email:value,code};
 }
+export function cancelRecoveryEmailVerification(profileId){
+  const record=[...accounts().values()].find(account=>account.profileId===profileId);
+  if(!record)return false;
+  delete record.pendingRecoveryEmail;delete record.pendingRecoveryEmailCodeHash;delete record.pendingRecoveryEmailExpiresAt;
+  return true;
+}
 export async function confirmRecoveryEmail(profileId,code){
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
   if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now())failure("Email verification code is invalid or expired.",401);
@@ -94,6 +100,12 @@ export async function startEmailPasswordRecovery(username){
   const code=sixDigitCode();
   record.emailRecoveryCodeHash=await digest(code);record.emailRecoveryExpiresAt=Date.now()+10*60*1000;
   return {sent:true,email:record.recoveryEmail,code};
+}
+export function cancelEmailPasswordRecovery(username){
+  const record=accounts().get(String(username||"").trim().toLowerCase());
+  if(!record)return false;
+  delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
+  return true;
 }
 export async function completeEmailPasswordRecovery({username,code,newPassword}){
   const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);validPassword(newPassword);

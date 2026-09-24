@@ -21,7 +21,7 @@ export const soundModes = Object.freeze(["off","minimal","full"]);
 export const motionModes = Object.freeze(["full","reduced","minimal"]);
 export const lockScreenPrivacy = Object.freeze(["full","private","hidden"]);
 export const attentionLevels = Object.freeze(["critical","time_sensitive","important","useful","background"]);
-export const interfaceModules = Object.freeze(["world","devices","health","security","memories","music","vehicle","apple_siri_iphone","amazon_alexa_echo","google_nest","smart_home","wearable","computer","health_data","pet_care","emergency_contacts"]);
+export const interfaceModules = Object.freeze(["world","devices","health","security","memories","music","vehicle","apple_siri_iphone","amazon_alexa_echo","google_nest","smart_home","tv","wearable","computer","health_data","pet_care","emergency_contacts"]);
 
 const settings = () => table("experience_settings");
 const later = () => table("later_queue");
@@ -30,18 +30,18 @@ export function defaultExperience(profileId) {
   return {
     profileId, proactiveMode:"helpful", communicationStyle:"natural", soundMode:"minimal",
     motionMode:"full", lockScreenPrivacy:"private", focusMode:false, doNotDisturb:false,
-    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, voiceAssistantMode:true, decorativeSounds:true,
+    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
     visibleModules:["world","devices","health","security","memories","music","vehicle"],
     pronunciation:null, preferredName:null, onboarded:false, onboardingVersion:0, updatedAt:now()
   };
 }
-export function experienceSettings(profileId) { const saved=settings().get(profileId); return saved?{...defaultExperience(profileId),...saved}:defaultExperience(profileId); }
+export function experienceSettings(profileId) { const saved=settings().get(profileId); if(!saved)return defaultExperience(profileId); const merged={...defaultExperience(profileId),...saved}; if(saved.handsFreeConfigured===undefined&&saved.onboarded&&saved.voiceEnabled!==false&&saved.voiceAssistantMode!==false)merged.handsFreeEnabled=true; return merged; }
 export function updateExperience(profileId, patch={}) {
   const current=experienceSettings(profileId);
   const next={...current};
   const enumSet=(key,values)=>{ if(patch[key]!==undefined){ if(!values.includes(patch[key])) throw Object.assign(new Error("Invalid "+key+"."),{status:400}); next[key]=patch[key]; }};
   enumSet("proactiveMode",proactiveModes); enumSet("communicationStyle",communicationStyles); enumSet("soundMode",soundModes); enumSet("motionMode",motionModes); enumSet("lockScreenPrivacy",lockScreenPrivacy);
-  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","voiceAssistantMode","decorativeSounds"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
+  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","handsFreeConfigured","voiceAssistantMode","decorativeSounds"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
   for(const key of ["pronunciation","preferredName"]) if(patch[key]!==undefined) next[key]=patch[key]===null?null:String(patch[key]).trim().slice(0,120);
   if(patch.visibleModules!==undefined){ if(!Array.isArray(patch.visibleModules)) throw Object.assign(new Error("Invalid visibleModules."),{status:400}); next.visibleModules=[...new Set(patch.visibleModules.map(String).filter(x=>interfaceModules.includes(x)))]; }
   if(patch.onboarded!==undefined) next.onboarded=Boolean(patch.onboarded); if(patch.onboardingVersion!==undefined) next.onboardingVersion=Math.max(0,Math.min(99,Number(patch.onboardingVersion)||0));

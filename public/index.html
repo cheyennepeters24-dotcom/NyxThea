@@ -36,7 +36,7 @@ body{background-color:#020713;background-image:linear-gradient(145deg,rgba(2,5,1
 <button class="emergency-button" id="emergency" aria-label="Open emergency help">Emergency</button>
 <div class="modal" id="modal" role="dialog" aria-modal="true"><section class="panel"><div class="panel-head"><h2 id="modalTitle">Nyxthea</h2><button class="close" id="close">×</button></div><div id="modalBody"></div></section></div>
 <script>
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));let credential=null,settingsAuthToken=null;localStorage.removeItem("nyxtheaCredential")
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));let credential=null,settingsAuthToken=null,sessionRestoreError=null;localStorage.removeItem("nyxtheaCredential")
 const modal=$("#modal"),title=$("#modalTitle"),body=$("#modalBody"),input=$("#input"),rose=$("#livingRose"),mic=$("#mic");let guideSession=null,guideStream=null,guideTimer=null,guideRecognition=null,guideTranscript="",guideBusy=false,guideToken=0,guidePending=[],guideResumeHandsFree=false;function session(){let ok=!!credential,s=$("#sideStatus");s.classList.toggle("unlocked",ok);s.lastElementChild.textContent=ok?"Signed in as "+credential.displayName:"Session locked";$("#unlock").lastElementChild.textContent=ok?credential.displayName:"Private profile"}
 async function api(path,o={}){
  const timeoutMs=Number(o.timeoutMs)||((path.startsWith("/api/voice/")||path.startsWith("/api/live-guide"))?7000:12000),controller=new AbortController(),external=o.signal;let timedOut=false;
@@ -59,9 +59,14 @@ async function nyxMediaRequest(promise,ms=7000,label="Media permission timed out
 }
 function nyxDeviceId(){let value=localStorage.getItem("nyxtheaDeviceId");if(!value){value=crypto.randomUUID();localStorage.setItem("nyxtheaDeviceId",value)}return value}
 async function registerThisDevice(){if(!credential)return;try{await api("/api/devices/register",{method:"POST",timeoutMs:6000,body:JSON.stringify({deviceId:nyxDeviceId(),label:navigator.platform||"This device",platform:navigator.platform||null})})}catch{}}
-async function restoreSession(){try{let d=await api("/api/auth/session",{timeoutMs:6000});credential=d.profile;session();if(credential)void registerThisDevice();return !!credential}catch{credential=null;session();return false}}
+async function restoreSession(){try{let d=await api("/api/auth/session",{timeoutMs:6000});sessionRestoreError=null;credential=d.profile;session();if(credential)void registerThisDevice();return !!credential}catch(e){sessionRestoreError=e;credential=null;session();return false}}
 
 function panel(t,h){title.textContent=t;body.innerHTML=h;modal.classList.add("open");$("#close").focus()}function shut(){if(guideSession)endLiveGuide(false);modal.classList.remove("open");input.focus()}$("#close").onclick=shut;modal.onclick=e=>{if(e.target===modal)shut()};addEventListener("keydown",e=>{if(e.key==="Escape")shut()});
+async function showSessionRestoreRetry(error=sessionRestoreError){
+ panel("I couldn’t verify your session",`<p>Your profile may still be signed in. I won’t make you log in again just because the connection check failed.</p><button id="retrySessionRestore" class="primary">Try again</button><button id="useAnotherProfile" class="secondary">Use another profile</button><p id="sessionRestoreNote" class="small">${esc(error?.message||"Session check failed.")}</p>`);
+ $("#retrySessionRestore").onclick=async()=>{const note=$("#sessionRestoreNote");note.textContent="Checking…";await restoreSession();if(sessionRestoreError){note.textContent=sessionRestoreError.message||"Session check failed.";return}if(!credential){unlock();return}await NYXExperience.load();const unlocked=await enforceProfileLock();if(!unlocked)return;shut();if(NYXExperience.needsOnboarding())NYXExperience.onboard();else if(NYXExperience.voiceSessionEnabled())NYXExperience.startVoiceSession()};
+ $("#useAnotherProfile").onclick=()=>{sessionRestoreError=null;unlock()};
+}
 function unlock(mode="login"){
  const signup=mode==="register";
  panel(signup?"Meet NyxThea":"Welcome back",`<p>${signup?"Create your private profile to start talking with NyxThea.":"Sign in to continue your conversation."}</p><form id="authForm"><input id="authUser" class="field" name="username" autocomplete="username" required minlength="3" maxlength="32" placeholder="Username">${signup?'<input id="authName" class="field" name="name" autocomplete="name" required maxlength="80" placeholder="What should NyxThea call you?">':""}<input id="authPass" class="field" name="password" type="password" autocomplete="${signup?"new-password":"current-password"}" required minlength="12" placeholder="Password (at least 12 characters)"><button class="primary" type="submit">${signup?"Create my profile":"Sign in"}</button></form><button id="switchAuth" class="secondary">${signup?"I already have an account":"Create an account"}</button>${signup?"":'<button id="claimAuth" class="secondary">I have a household invite</button><button id="recoverAuth" class="secondary">Use my recovery code</button>'}<p id="authNote" class="small" role="status"></p>`);
@@ -142,16 +147,16 @@ async function enforceProfileLock(){
  let d;try{d=await profileLockState()}catch(e){
   const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
   card.innerHTML='<h2>I couldn’t verify this profile’s lock state.</h2><p>For privacy, I won’t open the profile until that check succeeds.</p><button id="retryProfileLock" class="primary">Try again</button><button id="lockCheckSignOut" class="secondary">Use a different profile</button><p class="small">'+esc(e.message||"Connection check failed.")+'</p>';
-  $("#retryProfileLock").onclick=async()=>{host.classList.remove("show");const ok=await enforceProfileLock();if(ok&&NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180)};
+  $("#retryProfileLock").onclick=async()=>{host.classList.remove("show");const ok=await enforceProfileLock();if(ok&&NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180)};
   $("#lockCheckSignOut").onclick=signOut;
   return false
  }
  if(!d?.state?.enabled||!d.state.locked)return true;
  const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
  card.innerHTML='<h2>Profile locked.</h2><p>This adult profile is private on this device.</p><input id="unlockProfilePin" class="field" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN"><button id="unlockProfilePinBtn" class="primary">Unlock with PIN</button><button id="unlockProfileBioBtn" class="secondary">Use Face ID / Touch ID / device biometric</button><input id="unlockProfilePassword" class="field" type="password" autocomplete="current-password" placeholder="Forgot PIN? Use account password"><button id="unlockProfilePasswordBtn" class="secondary">Unlock with password</button><button id="lockedSignOut" class="secondary">Use a different profile</button><p id="profileUnlockNote" class="small"></p>';
- $("#unlockProfilePinBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/pin/verify",{method:"POST",body:JSON.stringify({pin:$("#unlockProfilePin").value,deviceId:nyxDeviceId()})});host.classList.remove("show");NYXSound.cue("unlock");note.textContent="";if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
- $("#unlockProfileBioBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await unlockWithBiometric("unlock");host.classList.remove("show");if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
- $("#unlockProfilePasswordBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/password/verify",{method:"POST",body:JSON.stringify({password:$("#unlockProfilePassword").value,deviceId:nyxDeviceId()})});host.classList.remove("show");if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfilePinBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/pin/verify",{method:"POST",body:JSON.stringify({pin:$("#unlockProfilePin").value,deviceId:nyxDeviceId()})});host.classList.remove("show");NYXSound.cue("unlock");note.textContent="";if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfileBioBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await unlockWithBiometric("unlock");host.classList.remove("show");if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfilePasswordBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/password/verify",{method:"POST",body:JSON.stringify({password:$("#unlockProfilePassword").value,deviceId:nyxDeviceId()})});host.classList.remove("show");if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
  $("#lockedSignOut").onclick=signOut; return false;
 }
 const NYX_MODULES=[
@@ -179,7 +184,7 @@ async function integrationDetail(kind){
  const item=NYX_MODULES.find(x=>x.key===kind),label=item?.label||kind;let current=null;try{current=(await api("/api/integrations")).integrations?.find(x=>x.kind===kind)}catch{}
  const state=current?.connection?.state||current?.state||"designed_not_connected";
  panel(label,`<p>This module is on your interface.</p><div class="item"><strong>Status</strong><p class="small">${esc(state==="active_connection"?"Connected and active":state==="requires_authorization"?"Selected; provider authorization still needs to be completed.":"Available on your interface; no provider connection is active yet.")}</p></div><button id="removeModule" class="secondary">Remove from my interface</button>`);
- $("#removeModule").onclick=async()=>{const visible=(NYXExperience.settings?.visibleModules||[]).filter(x=>x!==kind);await NYXExperience.save({visibleModules:visible});applyInterfacePreferences();shut()};
+ $("#removeModule").onclick=async()=>{const visible=(NYXExperience.settings?.visibleModules||[]).filter(x=>x!==kind);try{await NYXExperience.save({visibleModules:visible});applyInterfacePreferences();shut()}catch(e){panel(label,`<p>${esc(e.message)}</p><button id="removeModuleRetry" class="secondary">Try again</button>`);$("#removeModuleRetry").onclick=()=>integrationDetail(kind)}};
 }
 async function accountSettings(){
  let recovery=null,lockInfo=null;const [recoveryResult,lockResult]=await Promise.allSettled([api("/api/recovery/status",{timeoutMs:6000}),profileLockState()]);if(recoveryResult.status==="fulfilled")recovery=recoveryResult.value;if(lockResult.status==="fulfilled")lockInfo=lockResult.value;
@@ -198,7 +203,7 @@ async function accountSettings(){
  $("#changeAccountPassword").onclick=async()=>{const note=$("#passwordNote"),currentPassword=$("#currentAccountPassword").value,newPassword=$("#newAccountPassword").value;try{await api("/api/settings/change-password",{method:"POST",body:JSON.stringify({currentPassword,newPassword,deviceId:nyxDeviceId()})});note.textContent="Password changed. This device remains signed in."}catch(e){note.textContent=e.message}};
  $("#saveInterfaceModules").onclick=async()=>{const visible=$$("[data-module-choice]:checked").map(x=>x.dataset.moduleChoice);try{await NYXExperience.save({visibleModules:visible});applyInterfacePreferences();$("#interfaceNote").textContent="Your interface is updated."}catch(e){$("#interfaceNote").textContent=e.message}};
  $("#voiceEnabled").onchange=async e=>{try{await NYXExperience.save({voiceEnabled:e.target.checked});if(!e.target.checked){NYXHandsFree.stop();NYXVoice.stop()}$("#voiceNote").textContent="Voice preference saved."}catch(err){$("#voiceNote").textContent=err.message}};
- $("#handsFreeEnabled").onchange=async e=>{if(e.target.checked)NYXHandsFree.start();else NYXHandsFree.stop();try{await NYXExperience.save({handsFreeEnabled:e.target.checked});$("#voiceNote").textContent=e.target.checked?"Wake-by-name saved.":"Wake-by-name turned off."}catch(err){$("#voiceNote").textContent=err.message}};
+ $("#handsFreeEnabled").onchange=async e=>{if(e.target.checked)NYXHandsFree.start();else NYXHandsFree.stop();try{await NYXExperience.save({handsFreeEnabled:e.target.checked,handsFreeConfigured:true});$("#voiceNote").textContent=e.target.checked?"Wake-by-name saved.":"Wake-by-name turned off."}catch(err){$("#voiceNote").textContent=err.message}};
  $("#saveWakeNames").onclick=async()=>{try{const nicknames=$("#wakeNames").value.split(",").map(s=>s.trim()).filter(Boolean);const d=await api("/api/voice/nicknames",{method:"POST",body:JSON.stringify({nicknames})});credential=d.profile;$("#voiceNote").textContent="Voice names saved."}catch(err){$("#voiceNote").textContent=err.message}};
  const soundMode=$("#soundMode"),decorative=$("#decorativeSounds"),soundNote=$("#soundNote");soundMode.value=NYXExperience.settings?.soundMode||"minimal";decorative.checked=NYXExperience.settings?.decorativeSounds!==false;soundMode.onchange=async()=>{try{await NYXExperience.save({soundMode:soundMode.value});soundNote.textContent="Sound mode saved."}catch(e){soundNote.textContent=e.message}};decorative.onchange=async()=>{try{await NYXExperience.save({decorativeSounds:decorative.checked});soundNote.textContent="Sound preference saved."}catch(e){soundNote.textContent=e.message}};$("#testSound").onclick=async()=>{await NYXSound.prime();NYXSound.cue("startup")};
  const recoveryNote=$("#recoveryEmailNote");if(recovery?.recovery?.recoveryEmailVerified){$("#recoveryEmail").value=recovery.recovery.recoveryEmail||"";recoveryNote.textContent="Verified recovery email is active."}else if(recovery&&!recovery.emailDeliveryConfigured)recoveryNote.textContent="Recovery email delivery is not configured yet; your saved recovery code still works.";
@@ -209,7 +214,7 @@ async function accountSettings(){
 function state(s,label){const prior=document.body.dataset.nyxState;rose.classList.toggle("listening",s==="listening");rose.classList.toggle("speaking",s==="speaking");mic.classList.toggle("listening",s==="listening");$("#roseStatus").lastElementChild.textContent=label||"Ready when you are";if(s!==prior){document.body.dataset.nyxState=s==="ready"?"idle":s;if(s==="listening")NYXSound.cue("listening");else if(s==="thinking")NYXSound.cue("thinking");}}async function speak(text){if(NYXExperience.settings?.voiceEnabled===false)return false;const name=NYXExperience.settings?.preferredName,phonetic=NYXExperience.settings?.pronunciation;let spoken=String(text||"");if(name&&phonetic)spoken=spoken.replaceAll(name,phonetic);return window.NYXVoice?await NYXVoice.say(spoken):false;}
 async function send(m=input.value.trim(),{voiceTurn=false,fastVoice=false}={}){if(!m)return;if(!credential){unlock();return}input.value="";if(NYXHandsFree.active){for(const c of NYXHandsFree.wakeAborts){try{c.abort()}catch{}}NYXHandsFree.pause();}if(!voiceTurn)panel("Nyxthea",`<div class="msg user">${esc(m)}</div><div class="msg assistant" id="reply">Thinking…</div>`);state("thinking","Thinking");let answer="";const attempts=voiceTurn||fastVoice?1:2;for(let attempt=0;attempt<attempts&&!answer;attempt++){try{const d=await api(voiceTurn?"/api/voice/chat":"/api/chat",{method:"POST",timeoutMs:voiceTurn?5500:12000,body:JSON.stringify(voiceTurn?{message:m,speakerProfileId:NYXHandsFree.speakerProfileId}:{message:m})});answer=String(d.answer||"").trim();if(!voiceTurn&&d.degraded&&attempt+1<attempts){answer="";await nyxDelay(120)}}catch{if(attempt+1<attempts)await nyxDelay(120)}}if(!answer)answer="I hit a snag. Ask me that again.";if(!voiceTurn){const reply=$("#reply");if(reply)reply.textContent=answer}let spoken=false;try{spoken=await speak(answer)}finally{if(!spoken)NYXHandsFree.resume();if(!NYXVoice.speaking)state(NYXHandsFree.active?"listening":"ready",NYXHandsFree.active?"Listening for Hey Nyx":"Ready when you are")}}$("#send").onclick=()=>send();input.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();send()}};$$(".quick button[data-prefix]").forEach(b=>b.onclick=()=>{input.value=b.dataset.prefix;input.focus()});
 function toggleVoice(){if(!credential){unlock();return}if(NYXExperience.settings?.voiceEnabled===false){state("ready","Voice is disabled in your profile");return}const wasHandsFree=NYXHandsFree.active;if(wasHandsFree)NYXHandsFree.pause();NYXVoice.toggle(t=>{const spoken=String(t||"").trim();if(spoken)send(spoken,{voiceTurn:true});else if(wasHandsFree)NYXHandsFree.resume()})}mic.onclick=toggleVoice;
-async function memories(){if(!credential){unlock();return}try{let d=await api("/api/memories"),list=d.memories.length?d.memories.map(x=>`<div class="item">${esc(x.text)}</div>`).join(""):'<div class="item">Nothing is saved yet.</div>';panel("Your memory",`<p>${esc(d.notice||"Memory remains under your control.")}</p>${list}<input id="memText" class="field" placeholder="Save something you choose"><button id="saveMem" class="primary">Remember</button>`);$("#saveMem").onclick=async()=>{let text=$("#memText").value.trim();if(text){await api("/api/memories",{method:"POST",body:JSON.stringify({text})});memories()}}}catch(e){panel("Your memory",`<p>${esc(e.message)}</p>`)}}$("#memory").onclick=memories;
+async function memories(){if(!credential){unlock();return}try{let d=await api("/api/memories"),list=d.memories.length?d.memories.map(x=>`<div class="item">${esc(x.text)}</div>`).join(""):'<div class="item">Nothing is saved yet.</div>';panel("Your memory",`<p>${esc(d.notice||"Memory remains under your control.")}</p>${list}<input id="memText" class="field" placeholder="Save something you choose"><button id="saveMem" class="primary">Remember</button>`);$("#saveMem").onclick=async()=>{let text=$("#memText").value.trim();if(!text)return;try{await api("/api/memories",{method:"POST",body:JSON.stringify({text})});memories()}catch(e){panel("Your memory",`<p>${esc(e.message)}</p><button id="memoryRetry" class="secondary">Back to memories</button>`);$("#memoryRetry").onclick=memories}}}catch(e){panel("Your memory",`<p>${esc(e.message)}</p>`)}}$("#memory").onclick=memories;
 const emergencyLabels={i_need_help:"I need help",i_cannot_speak:"I cannot speak",medical:"Medical",fire_smoke:"Fire or smoke",intruder:"Intruder",home_emergency:"Home emergency",vehicle_crash:"Vehicle crash",lost_or_unsafe:"Lost or unsafe"};
 function emergencySetup(){let choices=Object.entries(emergencyLabels).map(([value,label],i)=>`<label class="choice"><input type="radio" name="emergencyType" value="${value}" ${i===0?"checked":""}> ${label}</label>`).join("");panel("Emergency help",`<a class="emergency-call" href="tel:911">Call 911 now (U.S.)</a><div class="item emergency-note"><strong>Nyxthea has not contacted 911 or anyone else.</strong><p>This screen works silently. The call button opens your phone's native dialer; you must place the call.</p></div><div class="choice-grid">${choices}</div><label class="choice"><input id="emergencyPractice" type="checkbox"> Practice mode — records a test only</label><button id="startEmergency" class="primary">Confirm and start</button><p id="emergencyStatus" class="small">${credential?"A confirmed incident will be saved to your private profile.":"You can call 911 without unlocking. Unlock is required only to save a Nyxthea incident timeline."}</p>`);$("#startEmergency").onclick=startEmergency}
 async function startEmergency(){let status=$("#emergencyStatus"),type=$("input[name=emergencyType]:checked")?.value,practice=$("#emergencyPractice").checked;if(!credential){status.textContent="Session locked. The 911 call button still works; unlock only if you want to save an incident timeline.";return}try{status.textContent="Starting…";let d=await api("/api/emergency/incidents",{method:"POST",body:JSON.stringify({type,practice,confirm:true})});renderEmergency(d.incident)}catch(e){status.textContent=e.message}}
@@ -310,7 +315,7 @@ const NYXHandsFree={
    try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null;
    if(wasActive)this.label(message)
  },
- enable(){this.start();if(this.active)NYXExperience.save({handsFreeEnabled:true,voiceAssistantMode:true}).catch(()=>{})},
+ async enable(){await this.start();if(this.active)await NYXExperience.save({handsFreeEnabled:true,voiceAssistantMode:true}).catch(()=>{})},
  disable(){this.stop();NYXExperience.save({handsFreeEnabled:false,voiceAssistantMode:false}).catch(()=>{})},
  pause(){
    if(!this.active)return;
@@ -321,25 +326,25 @@ const NYXHandsFree={
    state("thinking","Thinking")
  },
  resume(){
-   if(!this.active||document.hidden||guideSession)return;
+   if(!this.active||!this.paused||document.hidden||guideSession)return;
    if(this.engagedUntil>Date.now())this.engagedUntil=Date.now()+45000;
    this.paused=false;this.label("Listening for Hey Nyx");
    setTimeout(()=>{if(this.persistentStream&&this.stream)this.recordChunk();else this.open()},260)
  },
  async open(){
    if(!this.active||this.paused||document.hidden||this.stream||this.recorder||this.recognition)return;
-   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-   if(SR){this.openSpeechFallback();return}
    if(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder){
      try{
        const stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),7000,"Microphone permission timed out.");
        if(!this.active||this.paused||document.hidden){stream.getTracks().forEach(t=>t.stop());return}
-       this.stream=stream;this.failures=0;this.recordChunk();return
+       this.stream=stream;this.persistentStream=true;this.failures=0;this.recordChunk();return
      }catch(e){
-       this.stream=null;
+       this.stream=null;this.persistentStream=false;
        if(e?.name==="NotAllowedError"){this.label("Microphone permission is needed for Hey Nyx");return}
      }
    }
+   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+   if(SR){this.openSpeechFallback();return}
    this.label("Wake listening is unavailable in this browser")
  },
  recordChunk(){
@@ -360,7 +365,7 @@ const NYXHandsFree={
      recorder.start();
      const engaged=Date.now()<this.engagedUntil;
      this.timer=setTimeout(()=>{try{if(recorder.state!=="inactive")recorder.stop()}catch{}},engaged?2100:1600)
-   }catch{this.recorder=null;this.openSpeechFallback()}
+   }catch{this.recorder=null;if(this.persistentStream){try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null;this.persistentStream=false}this.openSpeechFallback()}
  },
  async processChunk(blob,token){
    if(this.wakeInFlight>=2||!this.active||this.paused||token!==this.generation)return;
@@ -454,11 +459,13 @@ function nyxStartupAudio(){
 }
 const NYXExperience={
  settings:null,
- async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
+ async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:false,soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
  async save(patch){try{const d=await api("/api/experience",{method:"POST",body:JSON.stringify(patch)});this.settings=d.settings}catch(e){const card=document.getElementById("nyxOnboardCard");if(card)card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(e.message)}. Please try again.</p>`);throw e}},
  state(value){document.body.dataset.nyxState=value;document.querySelector(".living-rose")?.classList.toggle("listening",value==="listening");document.querySelector(".living-rose")?.classList.toggle("speaking",value==="speaking")},
  needsOnboarding(){return Number(this.settings?.onboardingVersion||0)<2},
+ voiceSessionEnabled(){return this.settings?.voiceEnabled!==false&&this.settings?.handsFreeEnabled===true&&this.settings?.voiceAssistantMode!==false},
  async startVoiceSession(){
+   if(!this.voiceSessionEnabled()){state("ready",this.settings?.voiceEnabled===false?"Voice is disabled in your profile.":"Wake-by-name is off. Use the microphone button when you want to talk.");return}
    const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");
    host.classList.add("show");
    const name=this.settings?.pronunciation||this.settings?.preferredName||credential?.displayName||"";
@@ -545,12 +552,12 @@ const NYXExperience={
    const birthdaySpoken=await this.sayAndListen("When is your birthday? You can say something like July fourth nineteen ninety.",{hint:"Say your month, day, and year."});
    if(birthdaySpoken){const parsed=new Date(birthdaySpoken);if(!Number.isNaN(parsed.getTime())){const birthday=[parsed.getFullYear(),String(parsed.getMonth()+1).padStart(2,"0"),String(parsed.getDate()).padStart(2,"0")].join("-");try{await api("/api/household/identity",{method:"POST",body:JSON.stringify({birthday})})}catch{}}}
    card.innerHTML='<h2>How much should I speak up?</h2><div class="nyx-choice"><button data-p="quiet"><strong>Quiet</strong><br>I’m here when you ask.</button><button data-p="helpful"><strong>Helpful — Recommended</strong><br>I’ll speak up when something genuinely matters.</button><button data-p="engaged"><strong>Engaged</strong><br>Be involved. Notice things and suggest what’s next.</button></div>';
-   host.querySelectorAll("[data-p]").forEach(b=>b.onclick=async()=>{await this.save({proactiveMode:b.dataset.p});this.style(name,host)});
+   host.querySelectorAll("[data-p]").forEach(b=>b.onclick=async()=>{try{await this.save({proactiveMode:b.dataset.p});this.style(name,host)}catch(e){const status=host.querySelector("#nyxOnboardCard");status.innerHTML+=`<p class="small">${esc(e.message)}</p>`}});
  },
- style(name,host){host.querySelector("#nyxOnboardCard").innerHTML='<h2>How should we talk?</h2><div class="nyx-choice"><button data-s="professional"><strong>Professional</strong><br>Straightforward and polished.</button><button data-s="natural"><strong>Natural — Recommended</strong><br>Relaxed, warm, occasional humor.</button><button data-s="unfiltered"><strong>Unfiltered</strong><br>More personality, teasing and casual language.</button></div>';host.querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{await this.save({communicationStyle:b.dataset.s,onboarded:true,onboardingVersion:2,voiceAssistantMode:true,handsFreeEnabled:true});host.classList.remove("show");NYXSound.cue("success");await NYXVoice.say("Perfect. It’s nice to meet you, "+(this.settings?.pronunciation||name)+".");NYXHandsFree.start()})},
+ style(name,host){host.querySelector("#nyxOnboardCard").innerHTML='<h2>How should we talk?</h2><div class="nyx-choice"><button data-s="professional"><strong>Professional</strong><br>Straightforward and polished.</button><button data-s="natural"><strong>Natural — Recommended</strong><br>Relaxed, warm, occasional humor.</button><button data-s="unfiltered"><strong>Unfiltered</strong><br>More personality, teasing and casual language.</button></div>';host.querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{try{await this.save({communicationStyle:b.dataset.s,onboarded:true,onboardingVersion:2,voiceAssistantMode:true,handsFreeEnabled:true,handsFreeConfigured:true});host.classList.remove("show");NYXSound.cue("success");await NYXVoice.say("Perfect. It’s nice to meet you, "+(this.settings?.pronunciation||name)+".");NYXHandsFree.start()}catch(e){host.querySelector("#nyxOnboardCard").innerHTML+=`<p class="small">${esc(e.message)}</p>`}})},
  initMic(){document.getElementById("nyxMic").onclick=toggleVoice}
 };
-document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.settings?.voiceAssistantMode!==false){state("ready","Tap Start NYX to resume voice")}});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.voiceSessionEnabled()){void (async()=>{const unlocked=await enforceProfileLock();if(unlocked)NYXExperience.startVoiceSession()})()}});
 window.addEventListener("pagehide",()=>{NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)});
 function dismissNyxLaunch(){document.getElementById("nyxLaunch")?.classList.add("done")}
 window.addEventListener("load",()=>{
@@ -574,8 +581,9 @@ window.addEventListener("load",()=>{
     setTimeout(()=>{
       try{
         if(needs)NYXExperience.onboard();
+        else if(sessionRestoreError)showSessionRestoreRetry(sessionRestoreError);
         else if(!credential)unlock();
-        else if(unlocked&&NYXExperience.settings?.voiceAssistantMode!==false)NYXExperience.startVoiceSession();
+        else if(unlocked&&NYXExperience.voiceSessionEnabled())NYXExperience.startVoiceSession();
       }catch(e){
         console.error("Nyx post-launch recovery.",e);
         state("ready","Ready when you are");

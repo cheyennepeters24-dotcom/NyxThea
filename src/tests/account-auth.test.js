@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { NyxtheaState } from '../../_worker.js';
-import { resetStateForTests } from '../state/store.js';
+import { resetStateForTests, table } from '../state/store.js';
 
 class FakeStorage {
   rows = new Map();
@@ -15,7 +15,7 @@ const storage = new FakeStorage();
 const env = { ASSETS: { fetch: () => new Response('asset') } };
 let object = new NyxtheaState({ storage }, env);
 env.NYXTHEA_STATE = { idFromName: () => 'primary', get: () => object };
-const call = (path, { method = 'GET', data, cookie, origin = 'https://nyxthea.test', headers = {} } = {}) => worker.fetch(new Request(`https://nyxthea.test${path}`, { method, headers: { ...(method === 'POST' ? { origin, 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers }, body: data ? JSON.stringify(data) : undefined }), env);
+const call = (path, { method = 'GET', data, cookie, origin = 'https://nyxthea.test', headers = {} } = {}) => worker.fetch(new Request(`https://nyxthea.test${path}`, { method, headers: { ...(method !== 'GET' ? { origin, ...(data ? { 'content-type': 'application/json' } : {}) } : {}), ...(cookie ? { cookie } : {}), ...headers }, body: data ? JSON.stringify(data) : undefined }), env);
 const body = async response => response.json();
 
 test('registration creates a persistent private session without an owner claim', async () => {
@@ -129,6 +129,8 @@ test('adult Settings require fresh verification and child profiles are denied', 
   assert.equal(pinSet.status, 200);
   const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
   assert.ok(pinVerified.authorization.token);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device},data:{deviceId:device}})).status,403);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verified.authorization.token},data:{deviceId:device}})).status,200);
 
   const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
   const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
@@ -181,6 +183,51 @@ test('household owner can manage integrations and save interface modules without
   assert.deepEqual(saved.settings.visibleModules,['world','security','amazon_alexa_echo']);
   const loaded = await body(await call('/api/experience', { cookie, headers:{'x-nyxthea-device':device} }));
   assert.deepEqual(loaded.settings.visibleModules,['world','security','amazon_alexa_echo']);
+
+  const tvSaved = await body(await call('/api/experience', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{ visibleModules:['world','tv'] }
+  }));
+  assert.deepEqual(tvSaved.settings.visibleModules,['world','tv']);
+
+  const action = await body(await call('/api/actions', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{type:'purchase',description:'Buy household supplies'}
+  }));
+  const authorized = await call(`/api/actions/authorize/${action.action.id}`, {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device}, data:{confirm:true}
+  });
+  assert.equal(authorized.status,200);
+  assert.equal((await body(authorized)).action.status,'authorized_not_executed');
+});
+
+
+test('real household owner can revoke a member grant without a legacy admin flag', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'grant-owner', displayName:'Owner', password:'grant-owner-password-123' } });
+  const info=await body(signup),cookie=signup.headers.get('set-cookie').split(';')[0],device='grant-owner-phone';
+  assert.deepEqual(info.profile.permissions,[]);
+  const met=await body(await call('/api/household/meet',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{displayName:'Member',birthday:'2000-01-01',relationshipToRequester:'child'}}));
+  table('profile_grants').set('grant_household_member',{
+    id:'grant_household_member',from:met.profile.id,to:'external-recipient',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
+  });
+  const revoked=await call('/api/profiles/grants/grant_household_member',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
+  assert.equal(revoked.status,200);
+  assert.equal((await body(revoked)).revoked,true);
+  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,info.profile.id);
+});
+
+test('device trust changes require fresh Settings verification', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup=await call('/api/auth/register',{method:'POST',data:{username:'device-trust-owner',displayName:'Owner',password:'device-trust-password-123'}});
+  const cookie=signup.headers.get('set-cookie').split(';')[0],device='owner-phone',target='tablet-1';
+  await call('/api/devices/register',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{deviceId:target,label:'Tablet'}});
+  const denied=await call(`/api/devices/${target}/trust`,{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{trusted:true}});
+  assert.equal(denied.status,403);
+  const verified=await body(await call('/api/settings/verify-password',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{password:'device-trust-password-123',deviceId:device}}));
+  const allowed=await call(`/api/devices/${target}/trust`,{method:'POST',cookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verified.authorization.token},data:{trusted:true}});
+  assert.equal(allowed.status,200);
+  assert.equal((await body(allowed)).device.trusted,true);
 });
 
 

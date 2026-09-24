@@ -25,9 +25,9 @@ import { prepareMusicCommand } from "./src/intelligence/music.js";
 import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
-import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
+import { hydrateDurableState, persistDurableState, snapshotDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -49,7 +49,7 @@ async function own(request, env, action) {
       const deviceId=request.headers.get("x-nyxthea-device")||"";
       const state=deviceLockState(profile,{deviceId});
       if(state.enabled&&state.locked)throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
-    }catch(error){if(error?.status===423)throw error;}
+    }catch(error){if(error?.status!==403)throw error;}
   }
   enforceRateLimit(`${profile.id}:${path}`);
   recordAccess({ profileId: profile.id, action });
@@ -89,8 +89,9 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/auth/recover") { authLimit(request, "recover", 5, 900000); const result = await recoverAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/start") {
     authLimit(request, "recover-email", 5, 900000);
+    if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
-    if(result.sent){await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code});}
+    if(result.sent){try{await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code})}catch(error){cancelEmailPasswordRecovery(input.username);throw error}}
     return json({sent:Boolean(result.sent)&&mailConfigured(env)});
   }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/complete") {
@@ -119,7 +120,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    authLimit(request,`settings-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/change-password") {
@@ -129,14 +130,15 @@ async function api(request, env, url) {
     return json({ok:true},200,{"set-cookie":sessionCookie(changed.token)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
+    authLimit(request,`settings-pin:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "GET" && url.pathname === "/api/recovery/status") return json({recovery:accountRecoveryStatus(profile.id),emailDeliveryConfigured:mailConfigured(env)});
   if (request.method === "POST" && url.pathname === "/api/recovery/email/start") {
     const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const result=await startRecoveryEmailVerification(profile.id,input.email);
-    await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code});
+    try{await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code})}catch(error){cancelRecoveryEmailVerification(profile.id);throw error}
     return json({sent:true,email:result.email});
   }
   if (request.method === "POST" && url.pathname === "/api/recovery/email/confirm") {
@@ -145,7 +147,8 @@ async function api(request, env, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/household/identity") return json({ identity: profileIdentity(profile.id), household: householdSummary(profile.id), devices: devicesFor(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/household/identity") {
-    const input = await readJson(request);
+    const input = await readJson(request), existingIdentity=profileIdentity(profile.id);
+    if(existingIdentity?.developmentalStage!=="adult"&&existingIdentity?.birthday&&input.birthday!==undefined&&input.birthday!==existingIdentity.birthday)return json({error:"A child profile's birthday can only be changed by a household adult."},403);
     const identityRecord = saveProfileIdentity(profile, input);
     const experiencePatch = {};
     if (input.preferredName !== undefined) experiencePatch.preferredName = input.preferredName;
@@ -162,6 +165,15 @@ async function api(request, env, url) {
     const claimCode = await createProfileClaimInvite(created.id, profile.id);
     return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household, claimCode }, 201);
   }
+  if (request.method === "POST" && url.pathname === "/api/household/member-identity") {
+    requireAdmin(profile); const input=await readJson(request);
+    requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    const household=householdSummary(profile.id);
+    if(!household.members.some(member=>member.profileId===input.profileId))return json({error:"That person is not in this household."},404);
+    const target=profileById(input.profileId);if(!target)return json({error:"That household profile is unavailable."},404);
+    const identityRecord=saveProfileIdentity(target,{preferredName:input.preferredName,pronunciation:input.pronunciation,birthday:input.birthday,birthdayMonthDay:input.birthdayMonthDay});
+    return json({identity:identityRecord,household:householdSummary(profile.id)});
+  }
   if (request.method === "POST" && url.pathname === "/api/household/relationship") {
     const input = await readJson(request);
     const household = householdSummary(profile.id);
@@ -175,15 +187,15 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/devices") return json({ devices: devicesFor(profile.id) });
   if (request.method === "GET" && url.pathname === "/api/profile-lock") {
     const deviceId=url.searchParams.get("deviceId")||"";
-    let state=null; try { state=deviceLockState(profile,{deviceId}); } catch { state={enabled:false,locked:false}; }
+    let state=null; try { state=deviceLockState(profile,{deviceId}); } catch(error) { if(error?.status===403)state={enabled:false,locked:false}; else throw error; }
     return json({ lock: profileLock(profile), state });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") { const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await setProfilePin(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) }); }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin/verify") {
-    const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
+    authLimit(request,`profile-pin:${profile.id}`,10,900000); const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/password/verify") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    authLimit(request,`profile-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}),lock:profileLock(profile)});
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/begin") {
@@ -200,14 +212,14 @@ async function api(request, env, url) {
     return json(payload);
   }
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock/biometric") {
-    const input=await readJson(request); return json({ lock:removeBiometricCredential(profile,input) });
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); return json({ lock:removeBiometricCredential(profile,input) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/lock-device") {
     const input=await readJson(request); return json({ lock:markDeviceLocked(profile,input) });
   }
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock") { requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth")); return json({ lock:disableProfileLock(profile) }); }
   if (request.method === "POST" && /^\/api\/devices\/[^/]+\/trust$/.test(url.pathname)) {
-    const input = await readJson(request);
+    const input = await readJson(request); requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth"));
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
   }
   if (request.method === "POST" && url.pathname === "/api/profiles") { requireAdmin(profile); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
@@ -226,7 +238,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/permissions/check") { const input = await readJson(request),household=householdSummary(profile.id),householdAdmin=household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner"); return json(permissionDecision(profile, input.action, {...input,householdAdmin})); }
   if (request.method === "GET" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/records")) { const targetProfileId = url.pathname.split("/")[3]; const domain = url.searchParams.get("domain"); const protectedDomain = { pet: "pet_care", vehicle: "vehicle_information", wellness: "health_wellness" }[domain]; requireProfileAccess({ requester: profile, targetProfileId, domain: protectedDomain }); return json({ records: listRecords(targetProfileId, domain) }); }
   if (request.method === "POST" && url.pathname === "/api/profiles/grants") { const input = await readJson(request); if (input.from !== profile.id) return json({ error: "A profile may grant only its own protected data." }, 403); return json({ grant: grantAccess(input) }, 201); }
-  if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1)) });
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) { const household=householdSummary(profile.id); return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1), { householdAdmin:isHouseholdAdmin(profile), householdProfileIds:(household.members||[]).map(member=>member.profileId) }) }); }
   if (request.method === "GET" && url.pathname === "/api/endpoints") return json({ topology: topology(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/endpoints") { requireAdmin(profile); return json({ endpoint: registerEndpoint({ ...(await readJson(request)), ownerProfileId: profile.id }) }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/endpoints/")) return json({ deleted: removeEndpoint(profile.id, url.pathname.split("/").at(-1)) });
@@ -254,7 +266,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/learning") return json(learningStatus(profile.id));
   if (request.method === "POST" && url.pathname === "/api/opportunities/evaluate") return json(await evaluateOpportunity(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/actions") return json({ action: prepareAction(profile.id, await readJson(request)) }, 201);
-  if (request.method === "POST" && url.pathname.startsWith("/api/actions/authorize/")) return json({ action: authorizeAction(profile, url.pathname.split("/").at(-1), await readJson(request)) });
+  if (request.method === "POST" && url.pathname.startsWith("/api/actions/authorize/")) { const input=await readJson(request); return json({ action: authorizeAction(profile, url.pathname.split("/").at(-1), {...input,householdAdmin:isHouseholdAdmin(profile)}) }); }
   if (request.method === "POST" && url.pathname.startsWith("/api/actions/verify/")) return json({ action: verifyAction(profile.id, url.pathname.split("/").at(-1), await readJson(request)) });
   if (request.method === "GET" && url.pathname === "/api/actions") return json({ actions: actionStatus(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/household") return json({ item: addHouseholdItem(profile.id, await readJson(request)) }, 201);
@@ -307,7 +319,7 @@ async function api(request, env, url) {
     try{
       const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
       const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
-      const audio=await env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+      const audio=await Promise.race([env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
       const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
       return new Response(audio.body,{status:audio.status,headers});
     }catch{return json({ error:"Natural voice could not finish. Falling back to the device voice." },503);}
@@ -320,7 +332,7 @@ async function api(request, env, url) {
     // Keep only burst protection so a runaway client cannot hammer transcription infrastructure.
     enforceRateLimit(`${profile.id}:voice-transcribe`, { limit: 90, windowMs: 60000 });
     try {
-      const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" });
+      const result = await Promise.race([env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" }),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice transcription timed out.")),6000))]);
       const text = String(result?.text || "").trim().slice(0, 4000);
       return json({ text });
     } catch { return json({ error: "Voice transcription could not finish. Please try again or type your message." }, 503); }
@@ -370,7 +382,12 @@ async function directHouseholdSpeaker(storage,requester,speakerProfileId){
   return profile;
 }
 export class NyxtheaState {
-  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); }
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); this.hydrated=false; this.hydrating=null; }
+  async ensureHydrated(){
+    if(this.hydrated)return;
+    if(!this.hydrating)this.hydrating=hydrateDurableState(this.ctx.storage).then(()=>{this.hydrated=true}).finally(()=>{this.hydrating=null});
+    await this.hydrating;
+  }
   mediaAllowed(profileId,path,limit){
     const key=`${profileId}:${path}`,now=Date.now(),entry=this.mediaLimits.get(key)||{start:now,count:0};
     if(now-entry.start>=60000){entry.start=now;entry.count=0}
@@ -421,9 +438,16 @@ export class NyxtheaState {
     const url=new URL(request.url);
     if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"||url.pathname==="/api/voice/chat"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
-      const before = await hydrateDurableState(this.ctx.storage);
-      try { return await api(request, this.env, url); }
-      finally { await persistDurableState(this.ctx.storage, before); }
+      await this.ensureHydrated();
+      const before = snapshotDurableState();
+      try {
+        const response=await api(request, this.env, url);
+        await persistDurableState(this.ctx.storage, before);
+        return response;
+      } catch(error) {
+        await hydrateDurableState(this.ctx.storage);
+        throw error;
+      }
     });
     this.queue = run.catch(() => undefined);
     return run;
