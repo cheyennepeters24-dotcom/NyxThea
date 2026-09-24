@@ -113,7 +113,7 @@ export async function changeAccountPassword(profileId,{currentPassword,newPasswo
   const salt=random();
   record.salt=salt;record.passwordHash=await derive(newPassword,salt);
   for(const [key,session] of sessions())if(session.profileId===profileId)sessions().delete(key);
-  return {ok:true};
+  return {ok:true,token:await makeSession(profileId)};
 }
 
 export async function loginAccount({ username, password }) {
