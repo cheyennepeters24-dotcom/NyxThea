@@ -165,6 +165,15 @@ async function api(request, env, url) {
     const claimCode = await createProfileClaimInvite(created.id, profile.id);
     return json({ profile: profileSummary(created), identity: profileIdentity(created.id), household, claimCode }, 201);
   }
+  if (request.method === "POST" && url.pathname === "/api/household/member-identity") {
+    requireAdmin(profile); const input=await readJson(request);
+    requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    const household=householdSummary(profile.id);
+    if(!household.members.some(member=>member.profileId===input.profileId))return json({error:"That person is not in this household."},404);
+    const target=profileById(input.profileId);if(!target)return json({error:"That household profile is unavailable."},404);
+    const identityRecord=saveProfileIdentity(target,{preferredName:input.preferredName,pronunciation:input.pronunciation,birthday:input.birthday,birthdayMonthDay:input.birthdayMonthDay});
+    return json({identity:identityRecord,household:householdSummary(profile.id)});
+  }
   if (request.method === "POST" && url.pathname === "/api/household/relationship") {
     const input = await readJson(request);
     const household = householdSummary(profile.id);
