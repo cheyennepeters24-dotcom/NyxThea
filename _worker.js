@@ -147,7 +147,8 @@ async function api(request, env, url) {
   }
   if (request.method === "GET" && url.pathname === "/api/household/identity") return json({ identity: profileIdentity(profile.id), household: householdSummary(profile.id), devices: devicesFor(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/household/identity") {
-    const input = await readJson(request);
+    const input = await readJson(request), existingIdentity=profileIdentity(profile.id);
+    if(existingIdentity?.developmentalStage!=="adult"&&existingIdentity?.birthday&&input.birthday!==undefined&&input.birthday!==existingIdentity.birthday)return json({error:"A child profile's birthday can only be changed by a household adult."},403);
     const identityRecord = saveProfileIdentity(profile, input);
     const experiencePatch = {};
     if (input.preferredName !== undefined) experiencePatch.preferredName = input.preferredName;
@@ -430,8 +431,14 @@ export class NyxtheaState {
     const run = this.queue.then(async () => {
       await this.ensureHydrated();
       const before = snapshotDurableState();
-      try { return await api(request, this.env, url); }
-      finally { await persistDurableState(this.ctx.storage, before); }
+      try {
+        const response=await api(request, this.env, url);
+        await persistDurableState(this.ctx.storage, before);
+        return response;
+      } catch(error) {
+        await hydrateDurableState(this.ctx.storage);
+        throw error;
+      }
     });
     this.queue = run.catch(() => undefined);
     return run;
