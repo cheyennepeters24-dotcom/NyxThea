@@ -37,11 +37,12 @@ import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js"
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-mail.js";
 import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
-import { isSystemAdmin, requireSystemAdmin, recordSystemAdminAction, systemAdminAudit } from "./src/security/system-admin.js";
+import { ensureInitialSystemAdmin, isSystemAdmin, requireSystemAdmin, recordSystemAdminAction, systemAdminAudit } from "./src/security/system-admin.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) {
   const profile = await identity(request, env);
+  ensureInitialSystemAdmin(profile, env.NYXTHEA_INITIAL_SYSTEM_ADMIN_PROFILE_ID);
   if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 });
   const path=new URL(request.url).pathname;
   const lockExempt=path.startsWith("/api/profile-lock")||path==="/api/devices/register";
