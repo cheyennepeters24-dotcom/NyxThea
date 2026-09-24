@@ -36,6 +36,9 @@ export function recordAuditFinding(profileId,{source="runtime",kind="detected",s
 export function auditFindings(profileId,{status}={}){
   return list("self_audit_findings",x=>x.profileId===profileId&&(!status||x.status===status)).sort((a,b)=>String(b.lastSeenAt||b.createdAt).localeCompare(String(a.lastSeenAt||a.createdAt)));
 }
+export function systemAuditFindings({status}={}){
+  return list("self_audit_findings",x=>(!status||x.status===status)).sort((a,b)=>String(b.lastSeenAt||b.createdAt).localeCompare(String(a.lastSeenAt||a.createdAt)));
+}
 
 function ownedFinding(profileId,idValue){
   const finding=audits().get(idValue);
@@ -66,7 +69,7 @@ export function verifyAuditRepair(profileId,idValue,{passed=false,evidence=""}={
   finding.status=passed?"verified":"failed"; finding.updatedAt=now(); audits().set(idValue,finding); return finding;
 }
 
-export function selfMonitor(profileId,{aiConnected=false}={}){
+export function selfMonitor(profileId,{aiConnected=false,systemWide=false}={}){
   const endpoints=list("endpoints",x=>x.ownerProfileId===profileId);
   const integrations=list("integration_connections",x=>x.profileId===profileId);
   const facts=list("world_facts",x=>x.profileId===profileId);
@@ -78,7 +81,7 @@ export function selfMonitor(profileId,{aiConnected=false}={}){
     endpoints:{registered:endpoints.length,connected:0},
     integrations:{registered:integrations.length,connected:integrations.filter(x=>x.state==="active_connection").length},
     knowledge:{total:facts.length,stale:stale.length},
-    failures:auditFindings(profileId,{status:"failed"}),findings:auditFindings(profileId),
+    failures:systemWide?systemAuditFindings({status:"failed"}):auditFindings(profileId,{status:"failed"}),findings:systemWide?systemAuditFindings():auditFindings(profileId),
     assumptions:[],retry:aiConnected?null:"Retry when the AI binding or internet service is available."
   };
 }
