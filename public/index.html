@@ -64,7 +64,7 @@ async function restoreSession(){try{let d=await api("/api/auth/session",{timeout
 function panel(t,h){title.textContent=t;body.innerHTML=h;modal.classList.add("open");$("#close").focus()}function shut(){if(guideSession)endLiveGuide(false);modal.classList.remove("open");input.focus()}$("#close").onclick=shut;modal.onclick=e=>{if(e.target===modal)shut()};addEventListener("keydown",e=>{if(e.key==="Escape")shut()});
 async function showSessionRestoreRetry(error=sessionRestoreError){
  panel("I couldn’t verify your session",`<p>Your profile may still be signed in. I won’t make you log in again just because the connection check failed.</p><button id="retrySessionRestore" class="primary">Try again</button><button id="useAnotherProfile" class="secondary">Use another profile</button><p id="sessionRestoreNote" class="small">${esc(error?.message||"Session check failed.")}</p>`);
- $("#retrySessionRestore").onclick=async()=>{const note=$("#sessionRestoreNote");note.textContent="Checking…";await restoreSession();if(sessionRestoreError){note.textContent=sessionRestoreError.message||"Session check failed.";return}if(!credential){unlock();return}await NYXExperience.load();const unlocked=await enforceProfileLock();if(!unlocked)return;shut();if(NYXExperience.needsOnboarding())NYXExperience.onboard();else if(NYXExperience.settings?.voiceAssistantMode!==false)NYXExperience.startVoiceSession()};
+ $("#retrySessionRestore").onclick=async()=>{const note=$("#sessionRestoreNote");note.textContent="Checking…";await restoreSession();if(sessionRestoreError){note.textContent=sessionRestoreError.message||"Session check failed.";return}if(!credential){unlock();return}await NYXExperience.load();const unlocked=await enforceProfileLock();if(!unlocked)return;shut();if(NYXExperience.needsOnboarding())NYXExperience.onboard();else if(NYXExperience.voiceSessionEnabled())NYXExperience.startVoiceSession()};
  $("#useAnotherProfile").onclick=()=>{sessionRestoreError=null;unlock()};
 }
 function unlock(mode="login"){
@@ -147,16 +147,16 @@ async function enforceProfileLock(){
  let d;try{d=await profileLockState()}catch(e){
   const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
   card.innerHTML='<h2>I couldn’t verify this profile’s lock state.</h2><p>For privacy, I won’t open the profile until that check succeeds.</p><button id="retryProfileLock" class="primary">Try again</button><button id="lockCheckSignOut" class="secondary">Use a different profile</button><p class="small">'+esc(e.message||"Connection check failed.")+'</p>';
-  $("#retryProfileLock").onclick=async()=>{host.classList.remove("show");const ok=await enforceProfileLock();if(ok&&NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180)};
+  $("#retryProfileLock").onclick=async()=>{host.classList.remove("show");const ok=await enforceProfileLock();if(ok&&NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180)};
   $("#lockCheckSignOut").onclick=signOut;
   return false
  }
  if(!d?.state?.enabled||!d.state.locked)return true;
  const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
  card.innerHTML='<h2>Profile locked.</h2><p>This adult profile is private on this device.</p><input id="unlockProfilePin" class="field" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN"><button id="unlockProfilePinBtn" class="primary">Unlock with PIN</button><button id="unlockProfileBioBtn" class="secondary">Use Face ID / Touch ID / device biometric</button><input id="unlockProfilePassword" class="field" type="password" autocomplete="current-password" placeholder="Forgot PIN? Use account password"><button id="unlockProfilePasswordBtn" class="secondary">Unlock with password</button><button id="lockedSignOut" class="secondary">Use a different profile</button><p id="profileUnlockNote" class="small"></p>';
- $("#unlockProfilePinBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/pin/verify",{method:"POST",body:JSON.stringify({pin:$("#unlockProfilePin").value,deviceId:nyxDeviceId()})});host.classList.remove("show");NYXSound.cue("unlock");note.textContent="";if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
- $("#unlockProfileBioBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await unlockWithBiometric("unlock");host.classList.remove("show");if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
- $("#unlockProfilePasswordBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/password/verify",{method:"POST",body:JSON.stringify({password:$("#unlockProfilePassword").value,deviceId:nyxDeviceId()})});host.classList.remove("show");if(NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfilePinBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/pin/verify",{method:"POST",body:JSON.stringify({pin:$("#unlockProfilePin").value,deviceId:nyxDeviceId()})});host.classList.remove("show");NYXSound.cue("unlock");note.textContent="";if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfileBioBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await unlockWithBiometric("unlock");host.classList.remove("show");if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
+ $("#unlockProfilePasswordBtn").onclick=async()=>{let note=$("#profileUnlockNote");try{await api("/api/profile-lock/password/verify",{method:"POST",body:JSON.stringify({password:$("#unlockProfilePassword").value,deviceId:nyxDeviceId()})});host.classList.remove("show");if(NYXExperience.voiceSessionEnabled()&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180);}catch(e){note.textContent=e.message}};
  $("#lockedSignOut").onclick=signOut; return false;
 }
 const NYX_MODULES=[
@@ -365,7 +365,7 @@ const NYXHandsFree={
      recorder.start();
      const engaged=Date.now()<this.engagedUntil;
      this.timer=setTimeout(()=>{try{if(recorder.state!=="inactive")recorder.stop()}catch{}},engaged?2100:1600)
-   }catch{this.recorder=null;this.openSpeechFallback()}
+   }catch{this.recorder=null;if(this.persistentStream){try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null;this.persistentStream=false}this.openSpeechFallback()}
  },
  async processChunk(blob,token){
    if(this.wakeInFlight>=2||!this.active||this.paused||token!==this.generation)return;
@@ -463,7 +463,9 @@ const NYXExperience={
  async save(patch){try{const d=await api("/api/experience",{method:"POST",body:JSON.stringify(patch)});this.settings=d.settings}catch(e){const card=document.getElementById("nyxOnboardCard");if(card)card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(e.message)}. Please try again.</p>`);throw e}},
  state(value){document.body.dataset.nyxState=value;document.querySelector(".living-rose")?.classList.toggle("listening",value==="listening");document.querySelector(".living-rose")?.classList.toggle("speaking",value==="speaking")},
  needsOnboarding(){return Number(this.settings?.onboardingVersion||0)<2},
+ voiceSessionEnabled(){return this.settings?.voiceEnabled!==false&&this.settings?.handsFreeEnabled===true&&this.settings?.voiceAssistantMode!==false},
  async startVoiceSession(){
+   if(!this.voiceSessionEnabled()){state("ready",this.settings?.voiceEnabled===false?"Voice is disabled in your profile.":"Wake-by-name is off. Use the microphone button when you want to talk.");return}
    const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");
    host.classList.add("show");
    const name=this.settings?.pronunciation||this.settings?.preferredName||credential?.displayName||"";
@@ -555,7 +557,7 @@ const NYXExperience={
  style(name,host){host.querySelector("#nyxOnboardCard").innerHTML='<h2>How should we talk?</h2><div class="nyx-choice"><button data-s="professional"><strong>Professional</strong><br>Straightforward and polished.</button><button data-s="natural"><strong>Natural — Recommended</strong><br>Relaxed, warm, occasional humor.</button><button data-s="unfiltered"><strong>Unfiltered</strong><br>More personality, teasing and casual language.</button></div>';host.querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{try{await this.save({communicationStyle:b.dataset.s,onboarded:true,onboardingVersion:2,voiceAssistantMode:true,handsFreeEnabled:true});host.classList.remove("show");NYXSound.cue("success");await NYXVoice.say("Perfect. It’s nice to meet you, "+(this.settings?.pronunciation||name)+".");NYXHandsFree.start()}catch(e){host.querySelector("#nyxOnboardCard").innerHTML+=`<p class="small">${esc(e.message)}</p>`}})},
  initMic(){document.getElementById("nyxMic").onclick=toggleVoice}
 };
-document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.settings?.voiceAssistantMode!==false){NYXExperience.startVoiceSession()}});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.voiceSessionEnabled()){void (async()=>{const unlocked=await enforceProfileLock();if(unlocked)NYXExperience.startVoiceSession()})()}});
 window.addEventListener("pagehide",()=>{NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)});
 function dismissNyxLaunch(){document.getElementById("nyxLaunch")?.classList.add("done")}
 window.addEventListener("load",()=>{
@@ -581,7 +583,7 @@ window.addEventListener("load",()=>{
         if(needs)NYXExperience.onboard();
         else if(sessionRestoreError)showSessionRestoreRetry(sessionRestoreError);
         else if(!credential)unlock();
-        else if(unlocked&&NYXExperience.settings?.voiceAssistantMode!==false)NYXExperience.startVoiceSession();
+        else if(unlocked&&NYXExperience.voiceSessionEnabled())NYXExperience.startVoiceSession();
       }catch(e){
         console.error("Nyx post-launch recovery.",e);
         state("ready","Ready when you are");
