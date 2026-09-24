@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-blocker-sweep
-Source commit: 7b9c30a5f9714d89f9fed6fa93464b134091013e
+Release: family-alpha-splash-fail-open
+Source commit: d39549b6f32e811939af4d12e9877935ae88a803
