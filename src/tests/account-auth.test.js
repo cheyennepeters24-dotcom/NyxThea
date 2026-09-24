@@ -184,6 +184,29 @@ test('household owner can manage integrations and save interface modules without
 });
 
 
+test('changing the account password rotates sessions but keeps the current device signed in', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'rotate-password', displayName:'Rotate', password:'old-password-12345' } });
+  const oldCookie=signup.headers.get('set-cookie').split(';')[0],device='rotate-phone';
+  const verified=await body(await call('/api/settings/verify-password', {
+    method:'POST', cookie:oldCookie, headers:{'x-nyxthea-device':device},
+    data:{password:'old-password-12345',deviceId:device}
+  }));
+  const changed=await call('/api/settings/change-password', {
+    method:'POST', cookie:oldCookie,
+    headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verified.authorization.token},
+    data:{currentPassword:'old-password-12345',newPassword:'new-password-67890',deviceId:device}
+  });
+  assert.equal(changed.status,200);
+  const newCookie=changed.headers.get('set-cookie').split(';')[0];
+  assert.notEqual(newCookie,oldCookie);
+  assert.equal((await body(await call('/api/auth/session',{cookie:oldCookie}))).profile,null);
+  assert.equal((await body(await call('/api/auth/session',{cookie:newCookie}))).profile.displayName,'Rotate');
+  assert.equal((await call('/api/auth/login',{method:'POST',data:{username:'rotate-password',password:'old-password-12345'}})).status,401);
+  assert.equal((await call('/api/auth/login',{method:'POST',data:{username:'rotate-password',password:'new-password-67890'}})).status,200);
+});
+
+
 test('adult profile cannot be unlocked through a direct bypass endpoint', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'lock-bypass', displayName: 'Adult', password: 'lock-bypass-password-123' } });

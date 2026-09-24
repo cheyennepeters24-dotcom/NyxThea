@@ -55,7 +55,8 @@ async function own(request, env, action) {
   recordAccess({ profileId: profile.id, action });
   return profile;
 }
-function requireAdmin(profile) { const household=householdSummary(profile.id); const owner=household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner"); if (!profile.permissions.includes("household_admin")&&!owner) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function isHouseholdAdmin(profile) { const household=householdSummary(profile.id); return Boolean(profile.permissions.includes("household_admin")||household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner")); }
+function requireAdmin(profile) { if (!isHouseholdAdmin(profile)) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
 function requireAdultProfile(profile) {
   const identityRecord=profileIdentity(profile.id);
   const adult=identityRecord?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin");
@@ -114,7 +115,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/agency/jobs") return json({ jobs: jobsFor(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/agency/jobs") return json({ job: createJob(profile.id, await readJson(request)) }, 201);
   if (request.method === "POST" && /^\/api\/agency\/jobs\/[^/]+\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
-  if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (profile.permissions.includes("household_admin") ? "owner" : "user") }));
+  if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (isHouseholdAdmin(profile) ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
@@ -124,7 +125,8 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/settings/change-password") {
     requireAdultProfile(profile); const input=await readJson(request);
     requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
-    return json(await changeAccountPassword(profile.id,{currentPassword:input.currentPassword,newPassword:input.newPassword}));
+    const changed=await changeAccountPassword(profile.id,{currentPassword:input.currentPassword,newPassword:input.newPassword});
+    return json({ok:true},200,{"set-cookie":sessionCookie(changed.token)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
     requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
@@ -208,7 +210,7 @@ async function api(request, env, url) {
     const input = await readJson(request);
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
   }
-  if (request.method === "POST" && url.pathname === "/api/profiles") { if (!profile.permissions.includes("household_admin")) return json({ error: "Household administrator permission is required." }, 403); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
+  if (request.method === "POST" && url.pathname === "/api/profiles") { requireAdmin(profile); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
   if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: env.NYXTHEA_STATE ? "password account and server session" : "temporary local-development credential" }); }
   if (request.method === "GET" && url.pathname === "/api/capabilities") return json({ capabilities: getCapabilities({ aiConnected: Boolean(env.AI), integrations: integrationStatus(profile.id) }) });
   if (request.method === "POST" && url.pathname === "/api/world/facts") return json({ fact: captureWorldFact(profile.id, await readJson(request)) }, 201);
@@ -247,7 +249,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const input = await readJson(request); if (domain === "wellness") requireProfileAccess({ requester: profile, targetProfileId: profile.id, domain: "health_wellness", consentId: input.consentId, consentDomain: "wellness" }); return json({ record: createRecord(profile.id, domain, input.type, input.data) }, 201); }
   if (request.method === "GET" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const records = listRecords(profile.id, domain); return json({ records, explanations: domain === "vehicle" ? records.map(vehicleExplanation) : [] }); }
   if (request.method === "POST" && url.pathname === "/api/learning/observations") return json({ observation: recordObservation(profile.id, (await readJson(request)).observation) }, 201);
-  if (request.method === "POST" && url.pathname === "/api/learning/proposals") { const input = await readJson(request); return json({ proposal: proposeLearningChange({ profileId: profile.id, observationId: input.observationId, proposedChange: input.proposedChange, authorized: profile.permissions.includes("household_admin") }) }, 201); }
+  if (request.method === "POST" && url.pathname === "/api/learning/proposals") { const input = await readJson(request); return json({ proposal: proposeLearningChange({ profileId: profile.id, observationId: input.observationId, proposedChange: input.proposedChange, authorized: isHouseholdAdmin(profile) }) }, 201); }
   if (request.method === "POST" && url.pathname.startsWith("/api/learning/test/")) return json({ proposal: testProposal(profile.id, url.pathname.split("/").at(-1), await readJson(request)) });
   if (request.method === "GET" && url.pathname === "/api/learning") return json(learningStatus(profile.id));
   if (request.method === "POST" && url.pathname === "/api/opportunities/evaluate") return json(await evaluateOpportunity(await readJson(request)));
@@ -270,7 +272,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/vehicle/crash-assessment") return json(assessCrash((await readJson(request)).signals));
   if (request.method === "POST" && url.pathname === "/api/vehicle/mode") return json(vehicleMode(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/live-guide") return json({ sessions: liveGuideSessions(profile.id), visionAvailable: Boolean(env.AI), mediaRetention: "Raw camera, screen, and microphone data is not stored by Nyxthea." });
-  if (request.method === "POST" && url.pathname === "/api/live-guide") return json({ session: startLiveGuide(profile.id, await readJson(request), { visionAvailable: Boolean(env.AI), profileRole: profile.role || (profile.permissions.includes("household_admin") ? "adult" : "unspecified") }) }, 201);
+  if (request.method === "POST" && url.pathname === "/api/live-guide") return json({ session: startLiveGuide(profile.id, await readJson(request), { visionAvailable: Boolean(env.AI), profileRole: profile.role || (isHouseholdAdmin(profile) ? "adult" : "unspecified") }) }, 201);
   if (request.method === "POST" && /^\/api\/live-guide\/[^/]+\/analyze$/.test(url.pathname)) { enforceRateLimit(`${profile.id}:live-guide-analysis`, { limit: 12, windowMs: 60000 }); const sessionId = url.pathname.split("/")[3]; return json(await analyzeLiveGuide(profile.id, sessionId, await readJson(request, MAX_MEDIA_JSON_BYTES), { ai: env.AI })); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/live-guide/")) return json({ session: stopLiveGuide(profile.id, url.pathname.split("/")[3]) });
   if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const incident = startBasicEmergency(profile.id, await readJson(request)); return json({ ...incident, incident, action: "proposal_only", audio: "remain_quiet", next: "use_native_emergency_call_or_one_time_location_if_needed" }, 202); }
@@ -383,7 +385,7 @@ export class NyxtheaState {
         const {audio,type}=await readJson(request,MAX_MEDIA_JSON_BYTES);
         if(typeof audio!=="string"||audio.length<100||audio.length>1400000||!/^[A-Za-z0-9+/]+={0,2}$/.test(audio)||!["audio/mp4","audio/webm","audio/wav","audio/ogg","audio/mpeg","audio/x-m4a"].includes(type))return json({error:"Please record a short audio clip and try again."},400);
         try{
-          const result=await this.env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio,task:"transcribe",language:"en"});
+          const result=await Promise.race([this.env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio,task:"transcribe",language:"en"}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice transcription timed out.")),6000))]);
           return json({text:String(result?.text||"").trim().slice(0,4000)});
         }catch{return json({error:"Voice transcription could not finish."},503)}
       }
@@ -407,7 +409,7 @@ export class NyxtheaState {
         try{
           const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
           const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
-          const audio=await this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+          const audio=await Promise.race([this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
           const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
           return new Response(audio.body,{status:audio.status,headers});
         }catch{return json({error:"Natural voice could not finish."},503)}
