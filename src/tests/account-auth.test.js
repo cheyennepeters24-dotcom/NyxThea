@@ -181,6 +181,22 @@ test('household owner can manage integrations and save interface modules without
   assert.deepEqual(saved.settings.visibleModules,['world','security','amazon_alexa_echo']);
   const loaded = await body(await call('/api/experience', { cookie, headers:{'x-nyxthea-device':device} }));
   assert.deepEqual(loaded.settings.visibleModules,['world','security','amazon_alexa_echo']);
+
+  const tvSaved = await body(await call('/api/experience', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{ visibleModules:['world','tv'] }
+  }));
+  assert.deepEqual(tvSaved.settings.visibleModules,['world','tv']);
+
+  const action = await body(await call('/api/actions', {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device},
+    data:{type:'purchase',description:'Buy household supplies'}
+  }));
+  const authorized = await call(`/api/actions/authorize/${action.action.id}`, {
+    method:'POST', cookie, headers:{'x-nyxthea-device':device}, data:{confirm:true}
+  });
+  assert.equal(authorized.status,200);
+  assert.equal((await body(authorized)).action.status,'authorized_not_executed');
 });
 
 
