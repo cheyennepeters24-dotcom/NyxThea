@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { converse } from "../core/conversation.js";
 import { orchestrate } from "../core/orchestration.js";
 import { classifyComplexity } from "../core/complexity.js";
+import { assessWakeTranscript } from "../architecture/voice.js";
 
 test("a spoken greeting receives a real reply without waiting on the model", async () => {
   const answer = await converse({ run: () => { throw Error("AI should not run for this greeting"); } }, "Hey Nyx. How are you?", {});
@@ -18,7 +19,6 @@ test("a failed model gives a candid answer and conversation has time to finish",
   assert.equal(response.modelUsed, false);
 });
 
-
 test("empty first model response is retried before degrading", async () => {
   let calls=0;
   const response = await converse({ run: async () => { calls++; return calls===1 ? { response:"" } : { response:"Second try worked." }; } }, "Tell me something useful.", {});
@@ -30,4 +30,25 @@ test("Nyxthea can describe herself without model dependency", async () => {
   const response = await converse({ run: async () => { throw Error("model should not run"); } }, "Can you tell me a little bit about you and what all you can do?", {});
   assert.match(response.text, /voice-first personal and household assistant/i);
   assert.equal(response.modelUsed, false);
+});
+
+test("wake word accepts natural requests instead of a fixed command grammar", () => {
+  for (const transcript of ["Nyx I was wondering if you could help with dinner", "Nixie this thing is acting weird", "NyxThea remind me later"]) {
+    const result=assessWakeTranscript({transcript,confidence:.8});
+    assert.equal(result.recognized,true);
+    assert.equal(result.safeToRespond,true);
+    assert.ok(result.request.length>0);
+  }
+});
+
+test("wake word alone can engage listening without inventing a request", () => {
+  const result=assessWakeTranscript({transcript:"Nyx",confidence:.8});
+  assert.equal(result.recognized,true);
+  assert.equal(result.safeToRespond,true);
+  assert.equal(result.request,"");
+});
+
+test("low-confidence or unaddressed speech stays quiet", () => {
+  assert.equal(assessWakeTranscript({transcript:"Nyx tell me the weather",confidence:.3}).safeToRespond,false);
+  assert.equal(assessWakeTranscript({transcript:"tell me the weather",confidence:.99}).recognized,false);
 });
