@@ -9,6 +9,14 @@ function auditEvent(actorProfileId,action,details={}){
   return event;
 }
 
+export function ensureInitialSystemAdmin(profile, bootstrapProfileId){
+  const target=String(bootstrapProfileId||"").trim();
+  if(!target||!profile?.id||profile.id!==target)return null;
+  const active=list("system_admins",grant=>grant?.active===true);
+  if(active.length)return admins().get(profile.id)||null;
+  return provisionSystemAdmin({actorProfileId:"deployment-bootstrap",profileId:profile.id,label:"Initial system administrator",reason:"trusted deployment bootstrap"});
+}
+
 export function isSystemAdmin(profile){
   if(!profile?.id)return false;
   const grant=admins().get(profile.id);
