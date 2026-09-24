@@ -325,8 +325,11 @@ async function api(request, env, url) {
       const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
       const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
       const audio=await Promise.race([env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
-      const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
-      return new Response(audio.body,{status:audio.status,headers});
+      if(!audio?.ok||!audio.body)throw new Error("Natural voice provider returned an invalid response.");
+      const providerType=String(audio.headers?.get("content-type")||"").toLowerCase();
+      if(providerType&&!providerType.startsWith("audio/"))throw new Error("Natural voice provider returned non-audio content.");
+      const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",providerType||"audio/mpeg");
+      return new Response(audio.body,{status:200,headers});
     }catch{return json({ error:"Natural voice could not finish. Falling back to the device voice." },503);}
   }
   if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
