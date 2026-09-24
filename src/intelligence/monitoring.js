@@ -91,13 +91,14 @@ export function explainFailure({operation,error,retryable=true}){
 }
 
 export function recordCiBuildRun({runId,repository,branch,sha,status,conclusion,url,jobs=[]}={}){
-  const stableId=String(runId||"").trim();
+  const stableId=String(runId||"").trim().slice(0,120);
   if(!stableId)throw Object.assign(new Error("CI run id is required."),{status:400});
   const allowedStatus=new Set(["queued","in_progress","completed"]),allowedConclusion=new Set(["success","failure","cancelled","skipped","timed_out","action_required","neutral","unknown"]),allowedResult=new Set(["success","failure","cancelled","skipped","timed_out","action_required","neutral","unknown"]);
   const cleanStatus=String(status||"completed").trim(),cleanConclusion=String(conclusion||"unknown").trim();
   if(!allowedStatus.has(cleanStatus)||!allowedConclusion.has(cleanConclusion))throw Object.assign(new Error("CI status or conclusion is invalid."),{status:400});
-  const cleanJobs=Array.isArray(jobs)?jobs.slice(0,16).map(job=>{const name=String(job?.name||"").trim().slice(0,120),result=String(job?.result||"unknown").trim();if(!name||!allowedResult.has(result))throw Object.assign(new Error("CI job report is invalid."),{status:400});return{name,result}}):[];
-  const record={runId:stableId.slice(0,120),repository:String(repository||"").trim().slice(0,180),branch:String(branch||"").trim().slice(0,180),sha:String(sha||"").trim().slice(0,64),status:cleanStatus,conclusion:cleanConclusion,url:String(url||"").trim().slice(0,500),jobs:cleanJobs,receivedAt:now()};
+  if(!Array.isArray(jobs))throw Object.assign(new Error("CI jobs must be an array."),{status:400});
+  const cleanJobs=jobs.slice(0,16).map(job=>{const name=String(job?.name||"").trim().slice(0,120),result=String(job?.result||"unknown").trim();if(!name||!allowedResult.has(result))throw Object.assign(new Error("CI job report is invalid."),{status:400});return{name,result}});
+  const record={runId:stableId,repository:String(repository||"").trim().slice(0,180),branch:String(branch||"").trim().slice(0,180),sha:String(sha||"").trim().slice(0,64),status:cleanStatus,conclusion:cleanConclusion,url:String(url||"").trim().slice(0,500),jobs:cleanJobs,receivedAt:now()};
   table("ci_build_runs").set(stableId,record);
   const rows=list("ci_build_runs").sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)));
   for(const stale of rows.slice(50))table("ci_build_runs").delete(stale.runId);
