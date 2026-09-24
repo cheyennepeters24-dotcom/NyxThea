@@ -106,7 +106,7 @@ async function setupDeviceBiometric(){
   if(!created)throw Error("Device biometric setup was cancelled.");
   const publicKey=created.response.getPublicKey?.(),algorithm=created.response.getPublicKeyAlgorithm?.();
   if(!publicKey||!algorithm)throw Error("This browser cannot register a secure device passkey for NyxThea yet.");
-  await api("/api/profile-lock/biometric",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),credentialId:bytesToB64url(created.rawId),publicKey:bytesToB64url(publicKey),algorithm,label:navigator.platform||"This device",clientDataJSON:bytesToB64url(created.response.clientDataJSON)})});
+  await api("/api/profile-lock/biometric",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId(),credentialId:bytesToB64url(created.rawId),publicKey:bytesToB64url(publicKey),algorithm,label:navigator.platform||"This device",clientDataJSON:bytesToB64url(created.response.clientDataJSON),authenticatorData:bytesToB64url(created.response.getAuthenticatorData())})});
   localStorage.setItem("nyxtheaBiometricCredential:"+credential.id,bytesToB64url(created.rawId));
   note.textContent="Device biometric/passkey unlock is enabled. Nyx stores the public credential only—not your face or fingerprint.";
  }catch(e){note.textContent=e.message||"Could not enable device biometric unlock."}
