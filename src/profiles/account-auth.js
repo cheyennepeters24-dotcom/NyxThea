@@ -110,8 +110,8 @@ export function cancelEmailPasswordRecovery(username){
 }
 export async function completeEmailPasswordRecovery({username,code,newPassword}){
   const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);validPassword(newPassword);
-  if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now())failure("Email recovery code is invalid or expired.",401);
-  if(!constantTimeEqual(await digest(String(code||"")),record.emailRecoveryCodeHash))failure("Email recovery code is invalid or expired.",401);
+  const actualCodeHash=await digest(String(code||"")),expectedCodeHash=record?.emailRecoveryCodeHash||await digest("nyxthea-missing-email-recovery");
+  if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now()||!constantTimeEqual(actualCodeHash,expectedCodeHash))failure("Email recovery code is invalid or expired.",401);
   const salt=random(),passwordHash=await derive(newPassword,salt),nextCode=random();
   record.salt=salt;record.passwordHash=passwordHash;record.recoveryHash=await digest(nextCode);
   delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
