@@ -424,7 +424,7 @@ export class NyxtheaState {
         const education=educationGuidance(speaker,prompt); if(!education.allowed)return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});
         if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true,speakerProfileId:speaker.id},503);
         try{
-          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),4000))]);
+          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),8000))]);
           return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
         }catch{return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true})}
       }
@@ -437,8 +437,11 @@ export class NyxtheaState {
           const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
           const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
           const audio=await Promise.race([this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
-          const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
-          return new Response(audio.body,{status:audio.status,headers});
+          if(!audio?.ok||!audio.body)return json({error:"Natural voice provider did not return audio."},503);
+          const headers=new Headers(audio.headers),contentType=String(headers.get("content-type")||"").toLowerCase();
+          if(!contentType.startsWith("audio/"))return json({error:"Natural voice provider returned an invalid response."},503);
+          headers.set("cache-control","no-store");
+          return new Response(audio.body,{status:200,headers});
         }catch{return json({error:"Natural voice could not finish."},503)}
       }
       return json({error:"Not found."},404);
