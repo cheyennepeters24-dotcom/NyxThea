@@ -40,3 +40,12 @@ test("audit findings remain isolated to their owning profile",()=>{
 });
 
 test("CI build health rejects malformed states and job results",()=>{assert.throws(()=>recordCiBuildRun({runId:"bad-state",status:"banana",conclusion:"success"}),error=>error.status===400);assert.throws(()=>recordCiBuildRun({runId:"bad-job",status:"completed",conclusion:"failure",jobs:[{name:"tests",result:"maybe"}]}),error=>error.status===400);const run=recordCiBuildRun({runId:"good-run",status:"completed",conclusion:"success",jobs:[{name:"tests",result:"success"}]});assert.equal(run.conclusion,"success");});
+
+
+test("CI build health normalizes ids and rejects unsafe report links",()=>{
+  const longId="x".repeat(180),run=recordCiBuildRun({runId:longId,status:"completed",conclusion:"success",url:"https://github.com/example/repo/actions/runs/1",jobs:[]});
+  assert.equal(run.runId.length,120);
+  assert.throws(()=>recordCiBuildRun({runId:"bad-jobs",status:"completed",conclusion:"success",jobs:"success"}),error=>error.status===400);
+  assert.throws(()=>recordCiBuildRun({runId:"unsafe-url",status:"completed",conclusion:"success",url:"javascript:alert(1)",jobs:[]}),error=>error.status===400);
+  assert.throws(()=>recordCiBuildRun({runId:"foreign-url",status:"completed",conclusion:"success",url:"https://example.com/run",jobs:[]}),error=>error.status===400);
+});
