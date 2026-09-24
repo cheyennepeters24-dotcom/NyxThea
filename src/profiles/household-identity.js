@@ -49,18 +49,24 @@ export function developmentalStage(birthday){
   if(age<18)return "older_teen";
   return "adult";
 }
+function normalizeMembership(profileId){
+  const active=[...memberships()].filter(([,m])=>m.profileId===profileId&&m.active!==false),valid=active.filter(([,m])=>households().has(m.householdId));
+  const chosen=valid[0]||null;
+  for(const [key,membership] of active)if(!chosen||key!==chosen[0])memberships().delete(key);
+  if(chosen){for(const [key,relationship] of relationships())if((relationship.fromProfileId===profileId||relationship.toProfileId===profileId)&&!list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).some(m=>m.profileId===relationship.fromProfileId)&&!list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).some(m=>m.profileId===relationship.toProfileId))relationships().delete(key);return chosen[1];}
+  return null;
+}
 export function ensureHousehold(profileId,{name}={}){
-  let membership=list("household_memberships",x=>x.profileId===profileId&&x.active!==false)[0];
-  if(membership){const existing=households().get(membership.householdId);if(existing)return existing;memberships().delete(`${membership.householdId}:${profileId}`);}
+  const membership=normalizeMembership(profileId);
+  if(membership)return households().get(membership.householdId);
   const household={id:id("household"),name:clean(name,80)||"My household",mode:"personal",createdBy:profileId,createdAt:now(),updatedAt:now()};
   households().set(household.id,household);
   memberships().set(`${household.id}:${profileId}`,{householdId:household.id,profileId,role:"owner",active:true,joinedAt:now()});
   return household;
 }
 export function householdForProfile(profileId){
-  const membership=list("household_memberships",x=>x.profileId===profileId&&x.active!==false)[0];
-  if(!membership)return null;
-  return households().get(membership.householdId)||null;
+  const membership=normalizeMembership(profileId);
+  return membership?households().get(membership.householdId)||null:null;
 }
 export function profileIdentity(profileId){
   const value=identities().get(profileId)||null;
