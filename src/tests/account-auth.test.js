@@ -303,3 +303,15 @@ test('adult profile cannot be unlocked through a direct bypass endpoint', async 
   const pin = await call('/api/profile-lock/pin/verify', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { pin: '1357', deviceId: device } });
   assert.equal(pin.status, 200);
 });
+
+test('CI ingestion is secret-gated and persists a valid build report', async () => {
+  resetStateForTests(); storage.rows.clear(); delete env.NYXTHEA_CI_INGEST_TOKEN; object=new NyxtheaState({storage},env);
+  const payload={runId:'ci-1',repository:'cheyennepeters24-dotcom/NyxThea',branch:'fix/test',sha:'abc123',status:'completed',conclusion:'success',jobs:[{name:'tests',result:'success'}]};
+  assert.equal((await call('/api/internal/ci-report',{method:'POST',data:payload})).status,503);
+  env.NYXTHEA_CI_INGEST_TOKEN='test-ingest-secret'; object=new NyxtheaState({storage},env);
+  assert.equal((await call('/api/internal/ci-report',{method:'POST',data:payload,headers:{authorization:'Bearer wrong'}})).status,401);
+  const accepted=await call('/api/internal/ci-report',{method:'POST',data:payload,headers:{authorization:'Bearer test-ingest-secret'}});
+  assert.equal(accepted.status,201); assert.equal((await body(accepted)).build.runId,'ci-1');
+  assert.equal(table('ci_build_runs').get('ci-1').conclusion,'success');
+  delete env.NYXTHEA_CI_INGEST_TOKEN;
+});
