@@ -136,6 +136,7 @@ export function markDeviceLocked(profile,{deviceId}={}){
   const current=locks().get(profile.id);
   if(!current)return {ok:true,locked:false};
   const stable=String(deviceId||"").trim().slice(0,128);
+  if(!stable)fail("Device identifier is required.");
   current.unlockedDevices=(current.unlockedDevices||[]).filter(x=>x!==stable);
   current.updatedAt=now();locks().set(profile.id,current);
   return {ok:true,locked:true,deviceId:stable};
