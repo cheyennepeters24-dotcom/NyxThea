@@ -33,20 +33,23 @@ export function snapshotDurableState() {
 export async function persistDurableState(storage, before) {
   const writes = [];
   const deletes = [];
+  const after = new Map();
   for (const collection of durableTables) {
     const previous = before.get(collection) || new Map();
     const currentEntries = snapshotTable(collection);
     const current = new Map(currentEntries.map(([key, value]) => [key, stableJson(value)]));
+    after.set(collection, current);
     for (const [key, value] of currentEntries) {
-      if (previous.get(key) !== stableJson(value)) writes.push([recordKey(collection, key), value]);
+      if (previous.get(key) !== current.get(key)) writes.push([recordKey(collection, key), value]);
     }
     for (const key of previous.keys()) {
       if (!current.has(key)) deletes.push(recordKey(collection, key));
     }
   }
-  if (!writes.length && !deletes.length) return;
+  if (!writes.length && !deletes.length) return after;
   await storage.transaction(async (transaction) => {
     for (const [key, value] of writes) await transaction.put(key, value);
     for (const key of deletes) await transaction.delete(key);
   });
+  return after;
 }

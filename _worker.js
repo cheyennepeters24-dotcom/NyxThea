@@ -25,7 +25,7 @@ import { prepareMusicCommand } from "./src/intelligence/music.js";
 import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
-import { hydrateDurableState, persistDurableState, snapshotDurableState } from "./src/state/durable-store.js";
+import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
 import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
@@ -384,10 +384,10 @@ async function directHouseholdSpeaker(storage,requester,speakerProfileId){
   return profile;
 }
 export class NyxtheaState {
-  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); this.hydrated=false; this.hydrating=null; }
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); this.hydrated=false; this.hydrating=null; this.persistedState=null; }
   async ensureHydrated(){
     if(this.hydrated)return;
-    if(!this.hydrating)this.hydrating=hydrateDurableState(this.ctx.storage).then(()=>{this.hydrated=true}).finally(()=>{this.hydrating=null});
+    if(!this.hydrating)this.hydrating=hydrateDurableState(this.ctx.storage).then(before=>{this.persistedState=before;this.hydrated=true}).finally(()=>{this.hydrating=null});
     await this.hydrating;
   }
   mediaAllowed(profileId,path,limit){
@@ -441,13 +441,12 @@ export class NyxtheaState {
     if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"||url.pathname==="/api/voice/chat"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
       await this.ensureHydrated();
-      const before = snapshotDurableState();
       try {
         const response=await api(request, this.env, url);
-        await persistDurableState(this.ctx.storage, before);
+        this.persistedState=await persistDurableState(this.ctx.storage, this.persistedState);
         return response;
       } catch(error) {
-        await hydrateDurableState(this.ctx.storage);
+        this.persistedState=await hydrateDurableState(this.ctx.storage);
         throw error;
       }
     });

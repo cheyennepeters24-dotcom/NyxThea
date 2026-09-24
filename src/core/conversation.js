@@ -1,5 +1,9 @@
 const MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8";
-const runAI = (ai, input, ms = 5500) => Promise.race([ai.run(MODEL, input), new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error("Conversation model timed out."), { status: 504 })), ms))]);
+const runAI = async (ai, input, ms = 5000) => {
+  let timer;
+  try { return await Promise.race([ai.run(MODEL, input), new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("Conversation model timed out."), { status: 504 })), ms); })]); }
+  finally { clearTimeout(timer); }
+};
 
 function extractText(result) {
   if (typeof result === "string") return result.trim();
@@ -25,13 +29,13 @@ export async function converse(ai, message, context) {
   const system = "You are Nyxthea, The Intelligence That Runs Your World. Use plain everyday American English. Be warm, clear, accurate, concise, and conversational. Write for natural speech: short sentences, smooth transitions, and no unnecessary formatting. Never claim an action, source, memory, capability, or connection that was not provided. Explain future features as planned, not active. Do not reveal internal implementation details unless asked.";
   const prompt = `${system}\n\nAuthorized context:\n${JSON.stringify(context)}\n\nUser: ${message}`;
   let lastError;
-  for (const max_tokens of [220, 160]) {
+  for (const [index, max_tokens] of [220, 160].entries()) {
     try {
-      const result = await runAI(ai, { prompt, max_tokens });
+      const result = await runAI(ai, { prompt, max_tokens }, index === 0 ? 5000 : 2000);
       const text = extractText(result);
       if (text) return { text, modelUsed: true };
       lastError = new Error("Conversation model returned an empty response.");
-    } catch (error) { lastError = error; }
+    } catch (error) { lastError = error; if (error?.status === 504) break; }
   }
   throw lastError || new Error("Conversation model did not return a response.");
 }

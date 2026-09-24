@@ -5,9 +5,9 @@ import { resetStateForTests, table } from "../state/store.js";
 import { remember, inspect, forget } from "../memory/memory.js";
 
 class FakeStorage {
-  constructor() { this.rows = new Map(); }
+  constructor() { this.rows = new Map(); this.puts = 0; }
   async list({ prefix }) { return new Map([...this.rows].filter(([key]) => key.startsWith(prefix))); }
-  async put(key, value) { this.rows.set(key, structuredClone(value)); }
+  async put(key, value) { this.puts++; this.rows.set(key, structuredClone(value)); }
   async delete(key) { return this.rows.delete(key); }
   async transaction(callback) { return callback(this); }
 }
@@ -50,4 +50,21 @@ test("Durable Object storage restores profiles, permissions, settings, audit rec
   resetStateForTests();
   await hydrateDurableState(storage);
   assert.equal(inspect("local-user:owner").length, 0);
+});
+
+test("successive requests reuse the persisted baseline and retain in-place changes", async () => {
+  resetStateForTests();
+  const storage = new FakeStorage();
+  let baseline = await hydrateDurableState(storage);
+  table("experience_settings").set("person", { soundMode: "minimal" });
+  baseline = await persistDurableState(storage, baseline);
+  assert.equal(storage.puts, 1);
+  baseline = await persistDurableState(storage, baseline);
+  assert.equal(storage.puts, 1);
+  table("experience_settings").get("person").soundMode = "off";
+  baseline = await persistDurableState(storage, baseline);
+  assert.equal(storage.puts, 2);
+  resetStateForTests();
+  await hydrateDurableState(storage);
+  assert.equal(table("experience_settings").get("person").soundMode, "off");
 });
