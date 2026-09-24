@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resetStateForTests } from "../state/store.js";
 import { createProfile } from "../profiles/profiles.js";
-import { addPersonToHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity } from "../profiles/household-identity.js";
+import { addPersonToHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship } from "../profiles/household-identity.js";
 
 test("a personal profile grows into a family household when Nyxthea meets a second person", () => {
   resetStateForTests();
@@ -46,3 +46,13 @@ test("DOB-derived minor profile is marked child", () => {
   assert.equal(profileIdentity(child.id).developmentalStage,"young_child");
 });
 
+
+
+test("partial birthdays and relationships reject invalid identity data",()=>{
+  resetStateForTests();
+  const adult=createProfile({displayName:"Adult",permissions:["household_admin"]});
+  saveProfileIdentity(adult,{preferredName:"Adult",birthdayMonthDay:"02-29"});
+  assert.throws(()=>saveProfileIdentity(adult,{birthdayMonthDay:"02-30"}),/valid date/);
+  const outsider=createProfile({displayName:"Outsider"});
+  assert.throws(()=>setRelationship(adult.id,outsider.id,"friend"),/same household/);
+});
