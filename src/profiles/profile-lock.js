@@ -70,7 +70,7 @@ export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={
   const d=String(deviceId||"").trim().slice(0,128);if(!d)fail("Device identifier is required.");
   if(!["register","unlock","settings"].includes(purpose))fail("Unsupported biometric purpose.");
   const trustedOrigin=String(origin||"").trim().slice(0,240),trustedRpId=String(rpId||"").trim().slice(0,240);if(!trustedOrigin||!trustedRpId)fail("Biometric site identity is required.");
-  let parsedOrigin;try{parsedOrigin=new URL(trustedOrigin)}catch{fail("Biometric site identity is invalid.");}if(parsedOrigin.hostname!==trustedRpId||!["https:","http:"].includes(parsedOrigin.protocol))fail("Biometric site identity is invalid.");
+  let parsedOrigin;try{parsedOrigin=new URL(trustedOrigin)}catch{fail("Biometric site identity is invalid.");}const host=parsedOrigin.hostname.toLowerCase(),rp=trustedRpId.toLowerCase(),local=host==="localhost"||host==="127.0.0.1"||host==="::1",secure=parsedOrigin.protocol==="https:"||(parsedOrigin.protocol==="http:"&&local),rpMatches=host===rp||host.endsWith(`.${rp}`);if(!secure||!rpMatches)fail("Biometric site identity is invalid.");
   const bytes=crypto.getRandomValues(new Uint8Array(32)),challenge=b64url(bytes),key=`${profile.id}:${d}:${purpose}`;
   challenges().set(key,{profileId:profile.id,deviceId:d,purpose,challenge,origin:trustedOrigin,rpId:trustedRpId,expiresAt:Date.now()+5*60*1000});
   return {challenge,purpose};
