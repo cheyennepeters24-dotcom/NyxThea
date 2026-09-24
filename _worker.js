@@ -120,7 +120,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    authLimit(request,"settings-password",10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/change-password") {
@@ -130,7 +130,7 @@ async function api(request, env, url) {
     return json({ok:true},200,{"set-cookie":sessionCookie(changed.token)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
+    authLimit(request,"settings-pin",10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
     return json({authorization:issueSettingsAuthorization(profile.id,input.deviceId)});
   }
   if (request.method === "GET" && url.pathname === "/api/recovery/status") return json({recovery:accountRecoveryStatus(profile.id),emailDeliveryConfigured:mailConfigured(env)});
@@ -182,10 +182,10 @@ async function api(request, env, url) {
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") { const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await setProfilePin(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) }); }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin/verify") {
-    const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
+    authLimit(request,"profile-pin",10,900000); const input=await readJson(request); await verifyProfilePin(profile,input); return json({ unlock: markDeviceUnlocked(profile,{deviceId:input.deviceId}), lock:profileLock(profile) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/password/verify") {
-    requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
+    authLimit(request,"profile-password",10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
     return json({unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}),lock:profileLock(profile)});
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/begin") {
@@ -209,7 +209,7 @@ async function api(request, env, url) {
   }
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock") { requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth")); return json({ lock:disableProfileLock(profile) }); }
   if (request.method === "POST" && /^\/api\/devices\/[^/]+\/trust$/.test(url.pathname)) {
-    const input = await readJson(request);
+    const input = await readJson(request); requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth"));
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
   }
   if (request.method === "POST" && url.pathname === "/api/profiles") { requireAdmin(profile); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
