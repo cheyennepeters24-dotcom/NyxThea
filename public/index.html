@@ -133,13 +133,19 @@ async function profileLockSettings(){
   panel("Adult profile lock",`<p>Unlock once on this device and Nyx stays unlocked here until you explicitly lock this profile or use another device.</p><div class="item"><strong>PIN</strong><input id="newProfilePin" class="field" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="4–8 digit PIN"><button id="saveProfilePin" class="primary">Set or change PIN</button></div><div class="item"><strong>Face ID / Touch ID / device biometric</strong><p class="small">Nyx uses the device's passkey/biometric prompt. Nyx does not receive or store your face or fingerprint.</p><button id="enableBiometric" class="secondary">Enable on this device</button></div><button id="lockProfileNow" class="secondary">Lock this profile on this device now</button><button id="disableProfileLock" class="secondary">Turn profile lock off</button><p id="profileLockNote" class="small">Status: ${lock.enabled?"enabled":"off"}.</p>`);
   $("#saveProfilePin").onclick=async()=>{let pin=$("#newProfilePin").value.trim(),note=$("#profileLockNote");try{await api("/api/profile-lock/pin",{method:"POST",body:JSON.stringify({pin,stayUnlockedOnDevice:true,deviceId:nyxDeviceId()})});note.textContent="PIN saved. This device remains unlocked."}catch(e){note.textContent=e.message}};
   $("#enableBiometric").onclick=setupDeviceBiometric;
-  $("#lockProfileNow").onclick=async()=>{await api("/api/profile-lock/lock-device",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId()})});NYXSound.cue("lock");shut();await enforceProfileLock()};
-  $("#disableProfileLock").onclick=async()=>{await api("/api/profile-lock",{method:"DELETE",body:"{}"});$("#profileLockNote").textContent="Profile lock is off."};
+  $("#lockProfileNow").onclick=async()=>{const note=$("#profileLockNote");try{await api("/api/profile-lock/lock-device",{method:"POST",body:JSON.stringify({deviceId:nyxDeviceId()})});NYXSound.cue("lock");shut();await enforceProfileLock()}catch(e){note.textContent=e.message}};
+  $("#disableProfileLock").onclick=async()=>{const note=$("#profileLockNote");try{await api("/api/profile-lock",{method:"DELETE",body:"{}"});note.textContent="Profile lock is off."}catch(e){note.textContent=e.message}};
  }catch(e){panel("Profile lock",`<p>${esc(e.message)}</p>`)}
 }
 async function enforceProfileLock(){
  if(!credential)return true;
- let d;try{d=await profileLockState()}catch(e){return true}
+ let d;try{d=await profileLockState()}catch(e){
+  const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
+  card.innerHTML='<h2>I couldn’t verify this profile’s lock state.</h2><p>For privacy, I won’t open the profile until that check succeeds.</p><button id="retryProfileLock" class="primary">Try again</button><button id="lockCheckSignOut" class="secondary">Use a different profile</button><p class="small">'+esc(e.message||"Connection check failed.")+'</p>';
+  $("#retryProfileLock").onclick=async()=>{host.classList.remove("show");const ok=await enforceProfileLock();if(ok&&NYXExperience.settings?.voiceAssistantMode!==false&&!NYXExperience.needsOnboarding())setTimeout(()=>NYXExperience.startVoiceSession(),180)};
+  $("#lockCheckSignOut").onclick=signOut;
+  return false
+ }
  if(!d?.state?.enabled||!d.state.locked)return true;
  const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
  card.innerHTML='<h2>Profile locked.</h2><p>This adult profile is private on this device.</p><input id="unlockProfilePin" class="field" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN"><button id="unlockProfilePinBtn" class="primary">Unlock with PIN</button><button id="unlockProfileBioBtn" class="secondary">Use Face ID / Touch ID / device biometric</button><input id="unlockProfilePassword" class="field" type="password" autocomplete="current-password" placeholder="Forgot PIN? Use account password"><button id="unlockProfilePasswordBtn" class="secondary">Unlock with password</button><button id="lockedSignOut" class="secondary">Use a different profile</button><p id="profileUnlockNote" class="small"></p>';
@@ -151,7 +157,7 @@ async function enforceProfileLock(){
 const NYX_MODULES=[
  {key:"world",label:"Your World",view:"Your World"},{key:"devices",label:"Devices",view:"Devices"},{key:"health",label:"Health",view:"Health"},
  {key:"security",label:"Security",view:"Security"},{key:"memories",label:"Memories",view:"Memories"},{key:"music",label:"Music",view:"Music"},{key:"vehicle",label:"Vehicle",view:"Vehicle"},
- {key:"apple_siri_iphone",label:"iPhone / Siri"},{key:"amazon_alexa_echo",label:"Alexa / Echo"},{key:"google_nest",label:"Google Nest"},{key:"smart_home",label:"Smart home"},
+ {key:"apple_siri_iphone",label:"iPhone / Siri"},{key:"amazon_alexa_echo",label:"Alexa / Echo"},{key:"google_nest",label:"Google Nest"},{key:"smart_home",label:"Smart home"},{key:"tv",label:"TV / streaming"},
  {key:"wearable",label:"Wearables"},{key:"computer",label:"Computer"},{key:"health_data",label:"Health data"},{key:"pet_care",label:"Pet care"},{key:"emergency_contacts",label:"Emergency contacts"}
 ];
 function applyInterfacePreferences(){
@@ -433,7 +439,7 @@ async function nyxPrimeFirstRun(){
   NYXSound.cue("startup");
   await nyxTimed(NYXVoice.prime(),1800,"Voice startup timed out").catch(()=>false);
   if(!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access is not available in this browser.");
-  const stream=await nyxTimed(navigator.mediaDevices.getUserMedia({audio:true,video:false}),5500,"Microphone permission timed out.");
+  const stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:true,video:false}),5500,"Microphone permission timed out.");
   try{stream?.getTracks().forEach(track=>track.stop())}catch{}
   return true;
 }
@@ -467,7 +473,7 @@ const NYXExperience={
      let wakeStream=null;
      try{
        if(!navigator.mediaDevices?.getUserMedia)throw new Error("Microphone access is not available.");
-       wakeStream=await nyxTimed(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),4500,"Microphone permission timed out.");
+       wakeStream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),4500,"Microphone permission timed out.");
      }catch(e){
        status.textContent=(e?.message||"Microphone could not start.")+" Tap Start NYX to try again.";
        button.disabled=false;button.textContent="Start NYX";return;
@@ -481,26 +487,26 @@ const NYXExperience={
  },
  async sayAndListen(prompt,{hint="I’m listening…",timeout=12000}={}){
    const card=document.getElementById("nyxOnboardCard");
-   card.innerHTML=`<h2>${esc(prompt)}</h2><div style="display:grid;place-items:center;padding:26px 0"><div class="nyx-voice-orb" style="width:92px;height:92px;border-radius:50%;border:1px solid #83d0ff88;box-shadow:0 0 34px #287cff66, inset 0 0 24px #1b59b855;display:grid;place-items:center;font-size:1.8rem">◉</div></div><p id="nyxVoiceStatus" class="small" style="text-align:center">${esc(hint)}</p><button id="nyxVoiceRetry" class="secondary" hidden>Tap once to answer</button>`;
+   card.innerHTML=`<h2>${esc(prompt)}</h2><div style="display:grid;place-items:center;padding:26px 0"><div class="nyx-voice-orb" style="width:92px;height:92px;border-radius:50%;border:1px solid #83d0ff88;box-shadow:0 0 34px #287cff66, inset 0 0 24px #1b59b855;display:grid;place-items:center;font-size:1.8rem">◉</div></div><p id="nyxVoiceStatus" class="small" style="text-align:center">${esc(hint)}</p><button id="nyxVoiceRetry" class="secondary" hidden>Tap once to answer</button><input id="nyxVoiceTyped" class="field" hidden placeholder="Type your answer instead"><button id="nyxVoiceTypedSubmit" class="secondary" hidden>Continue with typed answer</button>`;
    await NYXVoice.say(prompt);
    return new Promise(resolve=>{
-     const SR=window.SpeechRecognition||window.webkitSpeechRecognition,status=document.getElementById("nyxVoiceStatus"),retry=document.getElementById("nyxVoiceRetry");
+     const SR=window.SpeechRecognition||window.webkitSpeechRecognition,status=document.getElementById("nyxVoiceStatus"),retry=document.getElementById("nyxVoiceRetry"),typed=document.getElementById("nyxVoiceTyped"),typedSubmit=document.getElementById("nyxVoiceTypedSubmit");
      let finished=false,timer=null,recognition=null,attempts=0,retrying=false;
      const done=value=>{if(finished)return;finished=true;clearTimeout(timer);try{recognition?.abort()}catch{}this.state("idle");resolve(String(value||"").trim())};
      const miss=async message=>{if(finished||retrying)return;retrying=true;clearTimeout(timer);try{recognition?.abort()}catch{}recognition=null;this.state("idle");attempts++;if(attempts<=2){status.textContent=message||"I didn’t catch that.";await NYXVoice.say("I didn’t catch that. Say that again for me.");retrying=false;setTimeout(begin,320)}else{status.textContent="I’m having trouble hearing you over the background noise. Tap once and try again.";retry.hidden=false;retrying=false}};
      const begin=()=>{
        if(finished||retrying)return;
-       if(!SR){status.textContent="Voice recognition needs microphone access.";retry.hidden=false;return}
+       if(!SR){status.textContent="Voice recognition isn’t available here. You can type this answer instead.";retry.hidden=true;typed.hidden=false;typedSubmit.hidden=false;typed.focus();return}
        try{
          recognition=new SR();recognition.lang="en-US";recognition.continuous=false;recognition.interimResults=false;recognition.maxAlternatives=3;
          recognition.onstart=()=>{status.textContent="Listening…";this.state("listening")};
          recognition.onresult=e=>{const heard=e.results?.[0]?.[0],text=heard?.transcript?.trim()||"",conf=Number(heard?.confidence);if(!text||(Number.isFinite(conf)&&conf>0&&conf<.42)){miss("I didn’t catch that clearly.");return}done(text)};
-         recognition.onerror=e=>{if(["not-allowed","service-not-allowed"].includes(e.error)){this.state("idle");status.textContent="Tap once so I can use the microphone.";retry.hidden=false}else miss("I didn’t catch that.")};
+         recognition.onerror=e=>{if(["not-allowed","service-not-allowed"].includes(e.error)){this.state("idle");status.textContent="Microphone recognition is blocked. You can tap to retry or type this answer.";retry.hidden=false;typed.hidden=false;typedSubmit.hidden=false}else miss("I didn’t catch that.")};
          recognition.onend=()=>{if(recognition){recognition=null}if(!finished&&!retrying)miss("I didn’t catch that.")};
          recognition.start();timer=setTimeout(()=>miss("I didn’t catch that."),timeout);
        }catch{status.textContent="Tap once so I can listen.";retry.hidden=false}
      };
-     retry.onclick=async()=>{retry.hidden=true;attempts=0;try{const stream=await navigator.mediaDevices?.getUserMedia?.({audio:true,video:false});stream?.getTracks().forEach(t=>t.stop())}catch{}begin()};
+     retry.onclick=async()=>{retry.hidden=true;attempts=0;try{const promise=navigator.mediaDevices?.getUserMedia?.({audio:true,video:false});if(promise){const stream=await nyxMediaRequest(promise,5500,"Microphone permission timed out.");stream?.getTracks().forEach(t=>t.stop())}}catch{}begin()};typedSubmit.onclick=()=>{const value=typed.value.trim();if(value)done(value)};typed.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();typedSubmit.click()}};
      setTimeout(begin,320);
    })
  },
