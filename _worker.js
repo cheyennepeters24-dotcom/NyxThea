@@ -102,7 +102,7 @@ async function api(request, env, url) {
     if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
     if(result.sent){try{await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code})}catch(error){cancelEmailPasswordRecovery(input.username);throw error}}
-    return json({sent:Boolean(result.sent)&&mailConfigured(env)});
+    return json({sent:true});
   }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/complete") {
     authLimit(request, "recover-email-complete", 10, 900000);
