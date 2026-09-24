@@ -22,15 +22,14 @@ function constantTimeEqual(a,b){const left=String(a||""),right=String(b||""),len
 function derEcdsaToRaw(signature,size=32){
   const bytes=signature instanceof Uint8Array?signature:new Uint8Array(signature);
   if(bytes.length===size*2)return bytes;
-  if(bytes[0]!==0x30)fail("Biometric signature encoding is invalid.",401);
-  let i=2;if(bytes[1]&0x80)i=2+(bytes[1]&0x7f);
-  if(bytes[i++]!==0x02)fail("Biometric signature encoding is invalid.",401);
-  const rLen=bytes[i++],r=bytes.slice(i,i+rLen);i+=rLen;
-  if(bytes[i++]!==0x02)fail("Biometric signature encoding is invalid.",401);
-  const sLen=bytes[i++],ss=bytes.slice(i,i+sLen);
-  const trim=v=>v.length>size?v.slice(v.length-size):v;
-  const rr=trim(r),sv=trim(ss),out=new Uint8Array(size*2);
-  out.set(rr,size-rr.length);out.set(sv,size+(size-sv.length));return out;
+  const invalid=()=>fail("Biometric signature encoding is invalid.",401);
+  if(bytes.length<8||bytes[0]!==0x30)invalid();
+  let i=1,sequenceLength=bytes[i++];
+  if(sequenceLength&0x80){const count=sequenceLength&0x7f;if(!count||count>2||i+count>bytes.length)invalid();sequenceLength=0;for(let n=0;n<count;n++)sequenceLength=(sequenceLength<<8)|bytes[i++];}
+  if(sequenceLength!==bytes.length-i||bytes[i++]!==0x02)invalid();
+  const readInteger=()=>{if(i>=bytes.length)invalid();const length=bytes[i++];if(!length||i+length>bytes.length)invalid();const value=bytes.slice(i,i+length);i+=length;if(value[0]&0x80)invalid();if(value.length>1&&value[0]===0&&!(value[1]&0x80))invalid();const unsigned=value[0]===0?value.slice(1):value;if(unsigned.length>size)invalid();return unsigned;};
+  const r=readInteger();if(bytes[i++]!==0x02)invalid();const s=readInteger();if(i!==bytes.length)invalid();
+  const out=new Uint8Array(size*2);out.set(r,size-r.length);out.set(s,size+(size-s.length));return out;
 }
 function assertAdult(profile){
   const identity=profileIdentity(profile.id);
