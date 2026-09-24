@@ -10,6 +10,10 @@ if(!selectorHelper.test(scripts.join("\n"))){
   process.exit(1);
 }
 for(const [index,source] of scripts.entries()){
+  if(/\${3,}/.test(source)){
+    console.error(`Unknown selector helper in inline script ${index+1}.`);
+    process.exit(1);
+  }
   const invalidCollectionSelector=/(?<!\$)\$\([^)]*\)\.(?:forEach|map|filter|some|every)\b/g;
   const bad=[...source.matchAll(invalidCollectionSelector)];
   if(bad.length){
