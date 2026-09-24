@@ -13,8 +13,9 @@ const hex = bytes => [...new Uint8Array(bytes)].map(n => n.toString(16).padStart
 async function digest(value) { return hex(await crypto.subtle.digest('SHA-256', encoder.encode(value))); }
 async function derive(password, salt) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' }, key, 256));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 210000, hash: 'SHA-256' }, key, 256));
 }
+function constantTimeEqual(a,b){const left=String(a||""),right=String(b||"");if(left.length!==right.length)return false;let diff=0;for(let i=0;i<left.length;i++)diff|=left.charCodeAt(i)^right.charCodeAt(i);return diff===0;}
 const random = () => `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`;
 const sixDigitCode=()=>String((crypto.getRandomValues(new Uint32Array(1))[0]%900000)+100000);
 function validUsername(value) { const name = String(value || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9._-]{2,31}$/.test(name)) failure('Username must be 3–32 letters, numbers, dots, dashes, or underscores.'); return name; }
@@ -61,7 +62,7 @@ export async function verifyAccountPassword(profileId, password) {
   const salt=record?.salt||"nyxthea-missing-account";
   const expected=record?.passwordHash||await digest("nyxthea-missing-password");
   const actual=await derive(String(password||""),salt);
-  if(!record||actual!==expected)failure("Password is incorrect.",401);
+  if(!record||!constantTimeEqual(actual,expected))failure("Password is incorrect.",401);
   return {ok:true};
 }
 export function accountRecoveryStatus(profileId) {
@@ -135,7 +136,7 @@ export async function loginAccount({ username, password }) {
   const salt = record?.salt || 'nyxthea-missing-account';
   const expected = record?.passwordHash || await digest('nyxthea-missing-password');
   const actual = await derive(String(password || ''), salt);
-  if (!record || actual !== expected) failure('Username or password is incorrect.', 401);
+  if (!record || !constantTimeEqual(actual, expected)) failure('Username or password is incorrect.', 401);
   const profile = profileById(record.profileId);
   if (!profile) failure('Account profile is unavailable.', 503);
   return { profile: profileSummary(profile), token: await makeSession(profile.id) };
@@ -168,7 +169,7 @@ export async function recoverAccount({ username, recoveryCode, newPassword }) {
   validPassword(newPassword);
   const record = accounts().get(name);
   const actual = await digest(String(recoveryCode || ''));
-  if (!record || !record.recoveryHash || record.recoveryHash !== actual) failure('Recovery details are incorrect.', 401);
+  if (!record || !record.recoveryHash || !constantTimeEqual(record.recoveryHash, actual)) failure('Recovery details are incorrect.', 401);
   const salt = random(), passwordHash = await derive(newPassword, salt), nextCode = random();
   record.salt = salt; record.passwordHash = passwordHash; record.recoveryHash = await digest(nextCode);
   for (const [key, session] of sessions()) if (session.profileId === record.profileId) sessions().delete(key);
