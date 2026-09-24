@@ -37,7 +37,7 @@ import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js"
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-mail.js";
 import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
-import { requireSystemAdmin, recordSystemAdminAction } from "./src/security/system-admin.js";
+import { isSystemAdmin, requireSystemAdmin, recordSystemAdminAction, systemAdminAudit } from "./src/security/system-admin.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) {
@@ -119,6 +119,9 @@ async function api(request, env, url) {
   if (request.method === "POST" && /^\/api\/agency\/jobs\/[^/]+\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
   if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (isHouseholdAdmin(profile) ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/admin/access") return json({ householdAdmin: isHouseholdAdmin(profile), systemAdmin: isSystemAdmin(profile) });
+  if (request.method === "GET" && url.pathname === "/api/admin/household") { requireAdmin(profile); return json({ household: householdSummary(profile.id), devices: devicesFor(profile.id), integrations: integrationStatus(profile.id) }); }
+  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }), systemAudit: systemAdminAudit(profile), accessAudit: accessAudit(profile.id), integrationAudit: integrationAudit() }); }
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
     authLimit(request,`settings-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
@@ -256,7 +259,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/integrations") { requireAdmin(profile); const { kind, permissions } = await readJson(request); return json({ integration: requestConnection(profile.id, kind, permissions) }, 201); }
   if (request.method === "POST" && url.pathname.startsWith("/api/integrations/authorize/")) return json({ integration: authorizeConnection(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).permissions) });
   if (request.method === "DELETE" && url.pathname.startsWith("/api/integrations/")) return json({ revoked: revokeConnection(profile.id, url.pathname.split("/").at(-1)) });
-  if (request.method === "GET" && url.pathname === "/api/integrations/audit") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "integration.audit.viewed"); return json({ audit: integrationAudit(profile.id) }); }
+  if (request.method === "GET" && url.pathname === "/api/integrations/audit") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "integration.audit.viewed"); return json({ audit: integrationAudit() }); }
   if (request.method === "POST" && url.pathname === "/api/consents") return json({ consent: grantConsent(profile.id, await readJson(request)) }, 201);
   if (request.method === "DELETE" && url.pathname.startsWith("/api/consents/")) return json({ revoked: revokeConsent(profile.id, url.pathname.split("/").at(-1)) });
   if (request.method === "POST" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const input = await readJson(request); if (domain === "wellness") requireProfileAccess({ requester: profile, targetProfileId: profile.id, domain: "health_wellness", consentId: input.consentId, consentDomain: "wellness" }); return json({ record: createRecord(profile.id, domain, input.type, input.data) }, 201); }
