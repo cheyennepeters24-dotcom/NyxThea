@@ -37,6 +37,7 @@ import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js"
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-mail.js";
 import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
+import { requireSystemAdmin, recordSystemAdminAction } from "./src/security/system-admin.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) {
@@ -255,7 +256,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/integrations") { requireAdmin(profile); const { kind, permissions } = await readJson(request); return json({ integration: requestConnection(profile.id, kind, permissions) }, 201); }
   if (request.method === "POST" && url.pathname.startsWith("/api/integrations/authorize/")) return json({ integration: authorizeConnection(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).permissions) });
   if (request.method === "DELETE" && url.pathname.startsWith("/api/integrations/")) return json({ revoked: revokeConnection(profile.id, url.pathname.split("/").at(-1)) });
-  if (request.method === "GET" && url.pathname === "/api/integrations/audit") return json({ audit: integrationAudit(profile.id) });
+  if (request.method === "GET" && url.pathname === "/api/integrations/audit") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "integration.audit.viewed"); return json({ audit: integrationAudit(profile.id) }); }
   if (request.method === "POST" && url.pathname === "/api/consents") return json({ consent: grantConsent(profile.id, await readJson(request)) }, 201);
   if (request.method === "DELETE" && url.pathname.startsWith("/api/consents/")) return json({ revoked: revokeConsent(profile.id, url.pathname.split("/").at(-1)) });
   if (request.method === "POST" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const input = await readJson(request); if (domain === "wellness") requireProfileAccess({ requester: profile, targetProfileId: profile.id, domain: "health_wellness", consentId: input.consentId, consentDomain: "wellness" }); return json({ record: createRecord(profile.id, domain, input.type, input.data) }, 201); }
@@ -288,7 +289,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && /^\/api\/live-guide\/[^/]+\/analyze$/.test(url.pathname)) { enforceRateLimit(`${profile.id}:live-guide-analysis`, { limit: 12, windowMs: 60000 }); const sessionId = url.pathname.split("/")[3]; return json(await analyzeLiveGuide(profile.id, sessionId, await readJson(request, MAX_MEDIA_JSON_BYTES), { ai: env.AI })); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/live-guide/")) return json({ session: stopLiveGuide(profile.id, url.pathname.split("/")[3]) });
   if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const incident = startBasicEmergency(profile.id, await readJson(request)); return json({ ...incident, incident, action: "proposal_only", audio: "remain_quiet", next: "use_native_emergency_call_or_one_time_location_if_needed" }, 202); }
-  if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
+  if (request.method === "GET" && url.pathname === "/api/monitoring") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.monitoring.viewed"); return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) })); }
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
   if (request.method === "POST" && url.pathname === "/api/voice/chat") {
