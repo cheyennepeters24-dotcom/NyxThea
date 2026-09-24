@@ -4,6 +4,11 @@ import vm from "node:vm";
 const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
 if(!scripts.length)throw new Error("No inline script found in public/index.html");
+const selectorHelper=/const \$=s=>document\.querySelector\(s\),\$\$=s=>\[\.\.\.document\.querySelectorAll\(s\)\]/;
+if(!selectorHelper.test(scripts.join("\n"))){
+  console.error("Nyxthea must define distinct $() and $() selector helpers.");
+  process.exit(1);
+}
 for(const [index,source] of scripts.entries()){
   const invalidCollectionSelector=/(?<!\$)\$\([^)]*\)\.(?:forEach|map|filter|some|every)\b/g;
   const bad=[...source.matchAll(invalidCollectionSelector)];
