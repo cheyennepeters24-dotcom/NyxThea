@@ -218,7 +218,7 @@ async function api(request, env, url) {
     return json(beginBiometric(profile,{...input,origin,rpId}));
   }
     if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
-    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/verify") {
     const input=await readJson(request); const result=await verifyBiometricCredential(profile,input);
