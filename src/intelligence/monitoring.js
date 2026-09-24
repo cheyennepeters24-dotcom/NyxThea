@@ -79,7 +79,7 @@ export function selfMonitor(profileId,{aiConnected=false}={}){
     integrations:{registered:integrations.length,connected:integrations.filter(x=>x.state==="active_connection").length},
     knowledge:{total:facts.length,stale:stale.length},
     failures:auditFindings(profileId,{status:"failed"}),findings:auditFindings(profileId),
-    assumptions:["Isolate-local state may reset without durable storage."],retry:aiConnected?null:"Retry when the AI binding or internet service is available."
+    assumptions:[],retry:aiConnected?null:"Retry when the AI binding or internet service is available."
   };
 }
 
