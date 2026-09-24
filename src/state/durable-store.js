@@ -11,10 +11,11 @@ export async function hydrateDurableState(storage) {
   for (const collection of durableTables) {
     const records = await storage.list({ prefix: recordPrefix(collection) });
     const entries = [];
-    for (const [key, value] of records) entries.push([
-      decodeURIComponent(key.slice(recordPrefix(collection).length)),
-      value,
-    ]);
+    for (const [key, value] of records) {
+      const encodedKey=key.slice(recordPrefix(collection).length);let decodedKey;
+      try{decodedKey=decodeURIComponent(encodedKey)}catch{continue}
+      entries.push([decodedKey,value]);
+    }
     replaceTable(collection, entries);
     before.set(collection, new Map(entries.map(([key, value]) => [key, stableJson(value)])));
   }
