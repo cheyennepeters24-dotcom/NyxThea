@@ -26,6 +26,7 @@ test("Durable Object storage restores profiles, permissions, settings, audit rec
   table("conversation_turns").set("owner", [{ role:"user", content:"hello" }]);
   table("goals").set("goal_1", { id:"goal_1", profileId:"owner", title:"Finish setup" });
   table("world_facts").set("fact_1", { id:"fact_1", profileId:"owner", value:"home" });
+  table("endpoints").set("endpoint_1", { id:"endpoint_1", ownerProfileId:"owner", kind:"phone", name:"Owner phone" });
   remember("local-user:owner", "Keep the celestial rose interface", "long_term");
   await persistDurableState(storage, before);
 
@@ -41,6 +42,7 @@ test("Durable Object storage restores profiles, permissions, settings, audit rec
   assert.equal(table("conversation_turns").get("owner")[0].content, "hello");
   assert.equal(table("goals").get("goal_1").title, "Finish setup");
   assert.equal(table("world_facts").get("fact_1").value, "home");
+  assert.equal(table("endpoints").get("endpoint_1").name, "Owner phone");
   assert.equal(inspect("local-user:owner")[0].text, "Keep the celestial rose interface");
   forget("local-user:owner", inspect("local-user:owner")[0].id);
   await persistDurableState(storage, before);
