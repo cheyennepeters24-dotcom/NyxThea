@@ -309,7 +309,7 @@ async function api(request, env, url) {
     try{
       const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
       const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
-      const audio=await env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+      const audio=await Promise.race([env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
       const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
       return new Response(audio.body,{status:audio.status,headers});
     }catch{return json({ error:"Natural voice could not finish. Falling back to the device voice." },503);}
@@ -322,7 +322,7 @@ async function api(request, env, url) {
     // Keep only burst protection so a runaway client cannot hammer transcription infrastructure.
     enforceRateLimit(`${profile.id}:voice-transcribe`, { limit: 90, windowMs: 60000 });
     try {
-      const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" });
+      const result = await Promise.race([env.AI.run("@cf/openai/whisper-large-v3-turbo", { audio, task: "transcribe", language: "en" }),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice transcription timed out.")),6000))]);
       const text = String(result?.text || "").trim().slice(0, 4000);
       return json({ text });
     } catch { return json({ error: "Voice transcription could not finish. Please try again or type your message." }, 503); }
