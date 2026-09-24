@@ -21,6 +21,15 @@ export async function hydrateDurableState(storage) {
   return before;
 }
 
+export function snapshotDurableState() {
+  const before = new Map();
+  for (const collection of durableTables) {
+    const entries = snapshotTable(collection);
+    before.set(collection, new Map(entries.map(([key, value]) => [key, stableJson(value)])));
+  }
+  return before;
+}
+
 export async function persistDurableState(storage, before) {
   const writes = [];
   const deletes = [];
