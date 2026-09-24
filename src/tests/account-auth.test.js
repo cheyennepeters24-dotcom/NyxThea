@@ -127,14 +127,14 @@ test('adult Settings require fresh verification and child profiles are denied', 
   assert.ok(verified.authorization.token);
   const verifiedAgain = await body(await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'settings-adult-password-123', deviceId: device } }));
   assert.notEqual(verifiedAgain.authorization.token, verified.authorization.token);
-  const staleAuth = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verifiedAgain.authorization.token }, data: { pin: '2468', deviceId: device } });
+  const staleAuth = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
   assert.equal(staleAuth.status, 403);
-  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
+  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verifiedAgain.authorization.token }, data: { pin: '2468', deviceId: device } });
   assert.equal(pinSet.status, 200);
   const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
   assert.ok(pinVerified.authorization.token);
   assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device},data:{deviceId:device}})).status,403);
-  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verifiedAgain.authorization.token},data:{deviceId:device}})).status,200);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':pinVerified.authorization.token},data:{deviceId:device}})).status,200);
 
   const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
   const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
