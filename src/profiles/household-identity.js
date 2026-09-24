@@ -97,6 +97,7 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
   for(const [key,membership] of memberships()){
     if(membership.profileId===profile.id&&membership.householdId!==household.id&&membership.active!==false){
       memberships().delete(key);
+      for(const [relationshipKey,relationship] of relationships())if(relationship.fromProfileId===profile.id||relationship.toProfileId===profile.id)relationships().delete(relationshipKey);
       const remaining=list("household_memberships",x=>x.householdId===membership.householdId&&x.active!==false);
       if(!remaining.length)households().delete(membership.householdId);
     }
