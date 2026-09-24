@@ -39,6 +39,7 @@ body{background-color:#020713;background-image:linear-gradient(145deg,rgba(2,5,1
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));let credential=null,settingsAuthToken=null,sessionRestoreError=null;localStorage.removeItem("nyxtheaCredential")
 const modal=$("#modal"),title=$("#modalTitle"),body=$("#modalBody"),input=$("#input"),rose=$("#livingRose"),mic=$("#mic");let guideSession=null,guideStream=null,guideTimer=null,guideRecognition=null,guideTranscript="",guideBusy=false,guideToken=0,guidePending=[],guideResumeHandsFree=false;function session(){let ok=!!credential,s=$("#sideStatus");s.classList.toggle("unlocked",ok);s.lastElementChild.textContent=ok?"Signed in as "+credential.displayName:"Session locked";$("#unlock").lastElementChild.textContent=ok?credential.displayName:"Private profile"}
 async function api(path,o={}){
+ const sensitiveSettingsRequest=["/api/settings/change-password","/api/recovery/email/start","/api/recovery/email/confirm","/api/household/member-identity","/api/profile-lock/pin","/api/profile-lock/biometric"].some(p=>path===p||path.startsWith(p+"/"))||(/^\/api\/devices\/[^/]+\/trust$/.test(path));
  const timeoutMs=Number(o.timeoutMs)||((path.startsWith("/api/voice/")||path.startsWith("/api/live-guide"))?7000:12000),controller=new AbortController(),external=o.signal;let timedOut=false;
  const timer=setTimeout(()=>{timedOut=true;controller.abort()},timeoutMs);
  if(external){if(external.aborted)controller.abort();else external.addEventListener("abort",()=>controller.abort(),{once:true})}
@@ -46,7 +47,7 @@ async function api(path,o={}){
  try{
   const r=await fetch(path,{...rest,signal:controller.signal,credentials:"same-origin",headers:{"content-type":"application/json","x-nyxthea-device":nyxDeviceId(),...(settingsAuthToken?{"x-nyxthea-settings-auth":settingsAuthToken}:{}),...(o.headers||{})}});
   const d=await r.json().catch(()=>({error:"Unreadable response."}));
-  if(!r.ok){let e=Error(d.error||"Request failed");e.status=r.status;throw e}return d
+  if(!r.ok){let e=Error(d.error||"Request failed");e.status=r.status;throw e}if(sensitiveSettingsRequest)settingsAuthToken=null;return d
  }catch(e){
   if(timedOut){const err=Error("Nyx took too long to respond. Try that again.");err.status=504;throw err}
   throw e
