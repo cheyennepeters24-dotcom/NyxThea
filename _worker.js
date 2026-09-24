@@ -24,7 +24,7 @@ import { createGoal, updateGoal, startExperiment, measureExperiment, rememberDec
 import { prepareMusicCommand } from "./src/intelligence/music.js";
 import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
-import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
+import { selfMonitor, explainFailure, recordCiBuildRun, ciBuildRuns } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
 import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
@@ -39,6 +39,7 @@ import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-ma
 import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
 import { ensureInitialSystemAdmin, isSystemAdmin, requireSystemAdmin, recordSystemAdminAction, systemAdminAudit } from "./src/security/system-admin.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
+async function secureTokenEqual(a,b){const left=new TextEncoder().encode(String(a||"")),right=new TextEncoder().encode(String(b||""));if(!left.length||left.length!==right.length)return false;return crypto.subtle.timingSafeEqual?crypto.subtle.timingSafeEqual(left,right):await crypto.subtle.digest("SHA-256",left).then(async x=>{const y=await crypto.subtle.digest("SHA-256",right),xa=new Uint8Array(x),ya=new Uint8Array(y);let diff=0;for(let i=0;i<xa.length;i++)diff|=xa[i]^ya[i];return diff===0})}
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) {
   const profile = await identity(request, env);
@@ -66,6 +67,13 @@ function requireAdultProfile(profile) {
 }
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
+  if(request.method==="POST"&&url.pathname==="/api/internal/ci-report"){
+    if(!env.NYXTHEA_CI_INGEST_TOKEN)return json({error:"CI ingestion is not configured."},503);
+    const authorization=request.headers.get("authorization")||"",token=authorization.startsWith("Bearer ")?authorization.slice(7):"";
+    if(!await secureTokenEqual(token,env.NYXTHEA_CI_INGEST_TOKEN))return json({error:"Unauthorized."},401);
+    const input=await readJson(request);
+    return json({build:recordCiBuildRun(input)},201);
+  }
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
   if (url.pathname === "/api/alexa/authorize") return alexaAuthorize(request, env);
   if (url.pathname === "/api/alexa/token") return json(await alexaToken(request, env));
@@ -122,7 +130,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/admin/access") return json({ householdAdmin: isHouseholdAdmin(profile), systemAdmin: isSystemAdmin(profile) });
   if (request.method === "GET" && url.pathname === "/api/admin/household") { requireAdmin(profile); return json({ household: householdSummary(profile.id), devices: devicesFor(profile.id), integrations: integrationStatus(profile.id) }); }
-  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI), systemWide: true }), systemAudit: systemAdminAudit(profile), accessAudit: systemAccessAudit(profile), integrationAudit: integrationAudit() }); }
+  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI), systemWide: true }), systemAudit: systemAdminAudit(profile), accessAudit: systemAccessAudit(profile), integrationAudit: integrationAudit(), buildHealth: ciBuildRuns() }); }
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
     authLimit(request,`settings-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
