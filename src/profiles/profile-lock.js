@@ -68,7 +68,10 @@ export async function verifyProfilePin(profile,{pin}={}){
 export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={}){
   assertAdult(profile);
   const d=String(deviceId||"").trim().slice(0,128);if(!d)fail("Device identifier is required.");
-  if(!["register","unlock","settings"].includes(purpose))fail("Unsupported biometric purpose.");\n  const trustedOrigin=String(origin||"").trim().slice(0,240),trustedRpId=String(rpId||"").trim().slice(0,240);if(!trustedOrigin||!trustedRpId)fail("Biometric site identity is required.");\n  let parsedOrigin;try{parsedOrigin=new URL(trustedOrigin)}catch{fail("Biometric site identity is invalid.");}if(parsedOrigin.hostname!==trustedRpId||!["https:","http:"].includes(parsedOrigin.protocol))fail("Biometric site identity is invalid.");\n  const bytes=crypto.getRandomValues(new Uint8Array(32)),challenge=b64url(bytes),key=`${profile.id}:${d}:${purpose}`;
+  if(!["register","unlock","settings"].includes(purpose))fail("Unsupported biometric purpose.");
+  const trustedOrigin=String(origin||"").trim().slice(0,240),trustedRpId=String(rpId||"").trim().slice(0,240);if(!trustedOrigin||!trustedRpId)fail("Biometric site identity is required.");
+  let parsedOrigin;try{parsedOrigin=new URL(trustedOrigin)}catch{fail("Biometric site identity is invalid.");}if(parsedOrigin.hostname!==trustedRpId||!["https:","http:"].includes(parsedOrigin.protocol))fail("Biometric site identity is invalid.");
+  const bytes=crypto.getRandomValues(new Uint8Array(32)),challenge=b64url(bytes),key=`${profile.id}:${d}:${purpose}`;
   challenges().set(key,{profileId:profile.id,deviceId:d,purpose,challenge,origin:trustedOrigin,rpId:trustedRpId,expiresAt:Date.now()+5*60*1000});
   return {challenge,purpose};
 }
@@ -84,7 +87,10 @@ function parseClientData(value,record,expectedType){
 }
 export async function addBiometricCredential(profile,{deviceId,credentialId,publicKey,algorithm=-7,label,clientDataJSON,authenticatorData}={}){
   assertAdult(profile);
-  const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024),p=String(publicKey||"").trim(),alg=Number(algorithm);\n  if(!d||!c||!p||!clientDataJSON||!authenticatorData)fail("Device biometric credential is incomplete.");\n  if(![-7,-257].includes(alg))fail("Unsupported biometric credential algorithm.");\n  if(p.length>8192)fail("Biometric public key is too large.");
+  const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024),p=String(publicKey||"").trim(),alg=Number(algorithm);
+  if(!d||!c||!p||!clientDataJSON||!authenticatorData)fail("Device biometric credential is incomplete.");
+  if(![-7,-257].includes(alg))fail("Unsupported biometric credential algorithm.");
+  if(p.length>8192)fail("Biometric public key is too large.");
   const challenge=readChallenge(profile,d,"register");parseClientData(clientDataJSON,challenge,"webauthn.create");
   const auth=fromB64url(authenticatorData);if(auth.length<37)fail("Biometric registration response is invalid.",401);
   const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric registration is for a different site.",401);
