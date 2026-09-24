@@ -380,7 +380,7 @@ async function directVoiceProfile(storage,request){
   const token=sessionCookieValue(request);if(!token)throw Object.assign(new Error("Authentication is required."),{status:401});
   const hash=await digestHex(token);
   const session=await storage.get(durableKey("auth_sessions",hash));
-  if(!session||session.expiresAt<=Date.now())throw Object.assign(new Error("Authentication is required."),{status:401});
+  if(!session||!Number.isFinite(Number(session.expiresAt))||Number(session.expiresAt)<=Date.now())throw Object.assign(new Error("Authentication is required."),{status:401});
   const profile=await storage.get(durableKey("profiles",session.profileId));
   if(!profile)throw Object.assign(new Error("Authentication is required."),{status:401});
   const lock=await storage.get(durableKey("profile_locks",profile.id));
