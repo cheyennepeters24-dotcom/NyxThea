@@ -91,7 +91,9 @@ jobs:
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --arg test "$TEST_RESULT" --arg worker "$WORKER_RESULT" --arg source "$SOURCE_RESULT" --arg ui "$UI_RESULT" \
             '{runId:$runId,repository:$repository,branch:$branch,sha:$sha,status:"completed",conclusion:$conclusion,url:$url,jobs:[{name:"tests",result:$test},{name:"worker-syntax",result:$worker},{name:"source-syntax",result:$source},{name:"ui-syntax",result:$ui}]}')
-          curl --fail-with-body --silent --show-error \
+          if ! curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $INGEST_TOKEN" \
             -H "Content-Type: application/json" \
-            --data "$payload" "$INGEST_URL/api/internal/ci-report"
+            --data "$payload" "$INGEST_URL/api/internal/ci-report"; then
+            echo "::warning::NyxThea System Admin CI reporting failed; core CI results are unchanged."
+          fi
