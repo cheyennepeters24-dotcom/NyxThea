@@ -27,7 +27,7 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState, snapshotDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -91,7 +91,7 @@ async function api(request, env, url) {
     authLimit(request, "recover-email", 5, 900000);
     if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
-    if(result.sent){await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code});}
+    if(result.sent){try{await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code})}catch(error){cancelEmailPasswordRecovery(input.username);throw error}}
     return json({sent:Boolean(result.sent)&&mailConfigured(env)});
   }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/complete") {
@@ -138,7 +138,7 @@ async function api(request, env, url) {
     const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
     if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const result=await startRecoveryEmailVerification(profile.id,input.email);
-    await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code});
+    try{await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code})}catch(error){cancelRecoveryEmailVerification(profile.id);throw error}
     return json({sent:true,email:result.email});
   }
   if (request.method === "POST" && url.pathname === "/api/recovery/email/confirm") {
