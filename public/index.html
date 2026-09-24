@@ -454,7 +454,7 @@ function nyxStartupAudio(){
 }
 const NYXExperience={
  settings:null,
- async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,soundMode:"minimal",decorativeSounds:true,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
+ async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
  async save(patch){try{const d=await api("/api/experience",{method:"POST",body:JSON.stringify(patch)});this.settings=d.settings}catch(e){const card=document.getElementById("nyxOnboardCard");if(card)card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(e.message)}. Please try again.</p>`);throw e}},
  state(value){document.body.dataset.nyxState=value;document.querySelector(".living-rose")?.classList.toggle("listening",value==="listening");document.querySelector(".living-rose")?.classList.toggle("speaking",value==="speaking")},
  needsOnboarding(){return Number(this.settings?.onboardingVersion||0)<2},
