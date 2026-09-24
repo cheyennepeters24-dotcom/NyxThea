@@ -106,7 +106,10 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
   if(relationshipToRequester)setRelationship(requester.id,profile.id,relationshipToRequester,{label:relationshipLabel});
   return householdSummary(requester.id);
 }
-export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){\n  if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");\n  const fromMembership=list("household_memberships",x=>x.profileId===fromProfileId&&x.active!==false)[0],toMembership=list("household_memberships",x=>x.profileId===toProfileId&&x.active!==false)[0];\n  if(!fromMembership||!toMembership||fromMembership.householdId!==toMembership.householdId)fail("Relationships can only be set between confirmed members of the same household.",403);
+export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){
+  if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");
+  const fromMembership=list("household_memberships",x=>x.profileId===fromProfileId&&x.active!==false)[0],toMembership=list("household_memberships",x=>x.profileId===toProfileId&&x.active!==false)[0];
+  if(!fromMembership||!toMembership||fromMembership.householdId!==toMembership.householdId)fail("Relationships can only be set between confirmed members of the same household.",403);
   const normalized=clean(type,48).toLowerCase().replace(/\s+/g,"_");
   if(!normalized)fail("Relationship type is required.");
   const createdAt=now();
