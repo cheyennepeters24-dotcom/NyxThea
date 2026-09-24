@@ -10,8 +10,9 @@ export function issueSettingsAuthorization(profileId,deviceId,ttlMs=5*60*1000){
   return {token,expiresAt};
 }
 export function requireSettingsAuthorization(profileId,deviceId,token){
-  const record=auths().get(String(token||""));
-  if(!record||record.profileId!==profileId||record.deviceId!==String(deviceId||"")||record.expiresAt<=Date.now()){if(record?.expiresAt<=Date.now())auths().delete(String(token||""));fail("Fresh adult verification is required to change Settings.",403);}
+  const key=String(token||""),record=auths().get(key);
+  if(!record||record.profileId!==profileId||record.deviceId!==String(deviceId||"")||record.expiresAt<=Date.now()){if(record?.expiresAt<=Date.now())auths().delete(key);fail("Fresh adult verification is required to change Settings.",403);}
+  auths().delete(key);
   return true;
 }
 export function revokeSettingsAuthorization(token){auths().delete(String(token||""));}
