@@ -385,7 +385,7 @@ export class NyxtheaState {
         const {audio,type}=await readJson(request,MAX_MEDIA_JSON_BYTES);
         if(typeof audio!=="string"||audio.length<100||audio.length>1400000||!/^[A-Za-z0-9+/]+={0,2}$/.test(audio)||!["audio/mp4","audio/webm","audio/wav","audio/ogg","audio/mpeg","audio/x-m4a"].includes(type))return json({error:"Please record a short audio clip and try again."},400);
         try{
-          const result=await this.env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio,task:"transcribe",language:"en"});
+          const result=await Promise.race([this.env.AI.run("@cf/openai/whisper-large-v3-turbo",{audio,task:"transcribe",language:"en"}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice transcription timed out.")),6000))]);
           return json({text:String(result?.text||"").trim().slice(0,4000)});
         }catch{return json({error:"Voice transcription could not finish."},503)}
       }
@@ -409,7 +409,7 @@ export class NyxtheaState {
         try{
           const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
           const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
-          const audio=await this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true});
+          const audio=await Promise.race([this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
           const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
           return new Response(audio.body,{status:audio.status,headers});
         }catch{return json({error:"Natural voice could not finish."},503)}
