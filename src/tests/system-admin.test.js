@@ -37,3 +37,17 @@ test("revocation immediately removes system admin authority",()=>{
   assert.equal(isSystemAdmin(tech),false);
   assert.throws(()=>requireSystemAdmin(tech),error=>error.status===403);
 });
+
+
+test("trusted bootstrap provisions only the exact initial profile and only when no active admin exists",()=>{
+  resetStore();
+  const owner=createProfile({displayName:"Bootstrap Owner",permissions:["household_admin"]});
+  const other=createProfile({displayName:"Other"});
+  assert.equal(ensureInitialSystemAdmin(other,owner.id),null);
+  assert.equal(isSystemAdmin(other),false);
+  const grant=ensureInitialSystemAdmin(owner,owner.id);
+  assert.equal(grant.profileId,owner.id);
+  assert.equal(isSystemAdmin(owner),true);
+  assert.equal(ensureInitialSystemAdmin(other,other.id),null);
+  assert.equal(isSystemAdmin(other),false);
+});
