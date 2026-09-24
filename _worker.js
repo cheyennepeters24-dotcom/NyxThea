@@ -124,7 +124,8 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/settings/change-password") {
     requireAdultProfile(profile); const input=await readJson(request);
     requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
-    return json(await changeAccountPassword(profile.id,{currentPassword:input.currentPassword,newPassword:input.newPassword}));
+    const changed=await changeAccountPassword(profile.id,{currentPassword:input.currentPassword,newPassword:input.newPassword});
+    return json({ok:true},200,{"set-cookie":sessionCookie(changed.token)});
   }
   if (request.method === "POST" && url.pathname === "/api/settings/verify-pin") {
     requireAdultProfile(profile); const input=await readJson(request); await verifyProfilePin(profile,{pin:input.pin});
