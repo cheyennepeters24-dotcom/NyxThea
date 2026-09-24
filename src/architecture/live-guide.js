@@ -120,7 +120,7 @@ export async function analyzeLiveGuide(profileId, sessionId, input, { ai } = {})
     'Return only JSON with keys: mode (general|guided_learning), observation, nextStep, verification, caution, confidence (low|medium|high), risk (normal|caution|stop).',
   ].filter(Boolean).join("\n");
   const content = image ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: image } }] : prompt;
-  const response = await ai.run(LIVE_GUIDE_MODEL, { messages: [{ role: "user", content }], max_completion_tokens: 420, temperature: 0.1, response_format: { type: "json_object" }, store: false });
+  const response = await Promise.race([ai.run(LIVE_GUIDE_MODEL, { messages: [{ role: "user", content }], max_completion_tokens: 420, temperature: 0.1, response_format: { type: "json_object" }, store: false }), new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Live Guide analysis took too long."),{status:504})),8500))]);
   const guidance = enforceLearningIntegrity(parseGuidance(response), session.guidanceMode === "guided_learning");
   if (guidance.mode === "guided_learning") session.guidanceMode = "guided_learning";
   if (guidance.risk === "stop") session.status = "safety_hold";
