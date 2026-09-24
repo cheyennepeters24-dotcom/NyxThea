@@ -89,6 +89,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/auth/recover") { authLimit(request, "recover", 5, 900000); const result = await recoverAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/start") {
     authLimit(request, "recover-email", 5, 900000);
+    if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
     if(result.sent){await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code});}
     return json({sent:Boolean(result.sent)&&mailConfigured(env)});
@@ -135,6 +136,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/recovery/status") return json({recovery:accountRecoveryStatus(profile.id),emailDeliveryConfigured:mailConfigured(env)});
   if (request.method === "POST" && url.pathname === "/api/recovery/email/start") {
     const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth"));
+    if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const result=await startRecoveryEmailVerification(profile.id,input.email);
     await sendRecoveryMail(env,{to:result.email,kind:"verify",code:result.code});
     return json({sent:true,email:result.email});
