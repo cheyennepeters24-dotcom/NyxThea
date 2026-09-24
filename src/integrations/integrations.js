@@ -8,4 +8,4 @@ export function authorizeConnection(profileId, connectionId, grantedPermissions 
 export function revokeConnection(profileId, connectionId) { const item = connections().get(connectionId); if (!item || item.profileId !== profileId) return false; item.state = "revoked"; item.revokedAt = now(); audit(profileId, item.id, "revoked"); return true; }
 export function integrationStatus(profileId) { return adapterKinds.map((kind) => ({ ...adapterContract(kind), connection: list("integration_connections", (item) => item.profileId === profileId && item.kind === kind).at(-1) || null })); }
 export function audit(profileId, connectionId, action) { const entry = { id: id("integration_audit"), profileId, connectionId, action, at: now() }; audits().set(entry.id, entry); return entry; }
-export function integrationAudit(profileId) { return list("integration_audits", (entry) => entry.profileId === profileId); }
+export function integrationAudit(profileId) { return profileId ? list("integration_audits", (entry) => entry.profileId === profileId) : list("integration_audits"); }
