@@ -297,7 +297,7 @@ test('fresh Settings authorization is single-use for sensitive changes', async (
   const cookie=signup.headers.get('set-cookie').split(';')[0],device='single-use-phone';
   const verified=await body(await call('/api/settings/verify-password',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{password:'single-use-password-123',deviceId:device}}));
   const token=verified.authorization.token;
-  const first=await call('/api/devices/register',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{deviceId:'tablet'}});assert.equal(first.status,200);
+  const first=await call('/api/devices/register',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{deviceId:'tablet'}});assert.equal(first.status,201);
   assert.equal((await call('/api/devices/tablet/trust',{method:'POST',cookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':token},data:{trusted:true}})).status,200);
   assert.equal((await call('/api/devices/tablet/trust',{method:'POST',cookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':token},data:{trusted:false}})).status,403);
 });
