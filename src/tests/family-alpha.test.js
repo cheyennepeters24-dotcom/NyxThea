@@ -68,3 +68,16 @@ test("household move clears prior relationship records",()=>{
  const edges=[...table("profile_relationships").values()].filter(x=>x.fromProfileId===b.id||x.toProfileId===b.id);
  assert.equal(edges.length,2);assert.ok(edges.every(x=>x.fromProfileId===c.id||x.toProfileId===c.id));
 });
+
+
+test("household lookup repairs duplicate and orphan active memberships",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]});saveProfileIdentity(owner,{preferredName:"Owner"});
+ const valid=householdSummary(owner.id),memberships=table("household_memberships");
+ memberships.set("corrupt-orphan",{householdId:"missing-household",profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ memberships.set("duplicate-valid",{householdId:valid.id,profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ const repaired=householdSummary(owner.id);
+ assert.equal(repaired.id,valid.id);
+ const active=[...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false);
+ assert.equal(active.length,1);assert.equal(active[0].householdId,valid.id);
+});
