@@ -116,6 +116,18 @@ test('a household invite claims the existing profile instead of creating a dupli
 });
 
 
+test('child household members cannot add people or rewrite relationships', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const ownerSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'family-admin', displayName: 'Parent', password: 'family-admin-password-123' } });
+  const ownerCookie = ownerSignup.headers.get('set-cookie').split(';')[0];
+  await call('/api/household/identity', { method: 'POST', cookie: ownerCookie, data: { preferredName: 'Parent', birthday: '1990-01-01' } });
+  const met = await body(await call('/api/household/meet', { method: 'POST', cookie: ownerCookie, data: { displayName: 'Kid', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'family-child', password: 'family-child-password-123' } });
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('/api/household/meet', { method: 'POST', cookie: childCookie, data: { displayName: 'Unauthorized Person' } })).status, 403);
+  assert.equal((await call('/api/household/relationship', { method: 'POST', cookie: childCookie, data: { toProfileId: ownerSignup.profile?.id || met.household.createdBy, type: 'friend' } })).status, 403);
+});
+
 test('adult Settings require fresh verification and child profiles are denied', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const adultSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'settings-adult', displayName: 'Adult', password: 'settings-adult-password-123' } });
