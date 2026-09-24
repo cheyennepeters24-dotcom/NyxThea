@@ -5,7 +5,7 @@ import { recordPresenceSignal, currentPresence } from "./src/architecture/presen
 import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
-import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
+import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit, systemAccessAudit } from "./src/profiles/profiles.js";
 import { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
 import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
