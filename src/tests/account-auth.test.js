@@ -326,3 +326,13 @@ test('CI ingestion is secret-gated and persists a valid build report', async () 
   assert.equal(table('ci_build_runs').get('ci-1').conclusion,'success');
   delete env.NYXTHEA_CI_INGEST_TOKEN;
 });
+
+
+test('System Admin diagnostics stay isolated from ordinary household profiles', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup=await call('/api/auth/register',{method:'POST',data:{username:'ordinary-admin-check',displayName:'Ordinary',password:'ordinary-password-123'}}),cookie=signup.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('/api/admin/system',{cookie})).status,403);
+  const info=await body(signup);table('system_admins').set(info.profile.id,{profileId:info.profile.id,active:true});
+  table('ci_build_runs').set('run-1',{runId:'run-1',status:'completed',conclusion:'success',url:'https://github.com/example/repo/actions/runs/1',jobs:[],receivedAt:new Date().toISOString()});
+  const allowed=await call('/api/admin/system',{cookie});assert.equal(allowed.status,200);const data=await body(allowed);assert.equal(data.buildHealth[0].runId,'run-1');
+});
