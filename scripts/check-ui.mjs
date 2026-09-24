@@ -5,7 +5,7 @@ const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8
 const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
 if(!scripts.length)throw new Error("No inline script found in public/index.html");
 for(const [index,source] of scripts.entries()){
-  const invalidCollectionSelector=/(?<!\$)\$\([^\n;]*\)\.(?:forEach|map|filter|some|every)\b/g;
+  const invalidCollectionSelector=/(?<!\$)\$\([^)]*\)\.(?:forEach|map|filter|some|every)\b/g;
   const bad=[...source.matchAll(invalidCollectionSelector)];
   if(bad.length){
     console.error(`Single-element $() selector used as a collection in inline script ${index+1}: ${bad.map(m=>m[0]).join(" | ")}`);
