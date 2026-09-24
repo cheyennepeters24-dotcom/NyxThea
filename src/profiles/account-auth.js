@@ -89,8 +89,8 @@ export function cancelRecoveryEmailVerification(profileId){
 }
 export async function confirmRecoveryEmail(profileId,code){
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
-  if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now())failure("Email verification code is invalid or expired.",401);
-  if(!constantTimeEqual(await digest(String(code||"")),record.pendingRecoveryEmailCodeHash))failure("Email verification code is invalid or expired.",401);
+  const actualCodeHash=await digest(String(code||"")),expectedCodeHash=record?.pendingRecoveryEmailCodeHash||await digest("nyxthea-missing-email-verification");
+  if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now()||!constantTimeEqual(actualCodeHash,expectedCodeHash))failure("Email verification code is invalid or expired.",401);
   record.recoveryEmail=record.pendingRecoveryEmail;record.recoveryEmailVerified=true;
   delete record.pendingRecoveryEmail;delete record.pendingRecoveryEmailCodeHash;delete record.pendingRecoveryEmailExpiresAt;
   return {recoveryEmail:record.recoveryEmail,recoveryEmailVerified:true};
