@@ -150,7 +150,7 @@ export async function cookieProfile(request) {
 }
 export async function logoutAccount(request) { const token = cookie(request); if (token) sessions().delete(await digest(token)); }
 export function authLimit(request, action, limit, windowMs) {
-  const source = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const source = request.headers.get('cf-connecting-ip') || 'unknown';
   const key = `${action}:${source}`;
   const records = table('auth_rate_limits');
   const entry = records.get(key) || { start: Date.now(), count: 0 };
