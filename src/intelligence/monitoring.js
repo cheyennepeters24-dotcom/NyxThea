@@ -89,3 +89,17 @@ export function selfMonitor(profileId,{aiConnected=false,systemWide=false}={}){
 export function explainFailure({operation,error,retryable=true}){
   return{whatFailed:String(operation||"operation"),why:String(error||"The operation did not complete."),whatStillWorks:"Local, non-provider features remain available.",cannotDo:"Nyxthea will not claim the action succeeded.",retry:retryable?"You can retry after checking the connection or configuration.":"This action requires a new authorization or configuration."};
 }
+
+export function recordCiBuildRun({runId,repository,branch,sha,status,conclusion,url,jobs=[]}={}){
+  const stableId=String(runId||"").trim();
+  if(!stableId)throw Object.assign(new Error("CI run id is required."),{status:400});
+  const cleanJobs=Array.isArray(jobs)?jobs.slice(0,16).map(job=>({name:String(job?.name||"").slice(0,120),result:String(job?.result||"").slice(0,40)})):[];
+  const record={runId:stableId,repository:String(repository||"").slice(0,180),branch:String(branch||"").slice(0,180),sha:String(sha||"").slice(0,64),status:String(status||"completed").slice(0,40),conclusion:String(conclusion||"unknown").slice(0,40),url:String(url||"").slice(0,500),jobs:cleanJobs,receivedAt:now()};
+  table("ci_build_runs").set(stableId,record);
+  const rows=list("ci_build_runs").sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)));
+  for(const stale of rows.slice(50))table("ci_build_runs").delete(stale.runId);
+  return record;
+}
+export function ciBuildRuns(){
+  return list("ci_build_runs").sort((a,b)=>String(b.receivedAt).localeCompare(String(a.receivedAt)));
+}
