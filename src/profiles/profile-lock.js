@@ -14,7 +14,7 @@ const random=()=>`${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g,"")}`
 const b64url=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 const fromB64url=value=>Uint8Array.from(atob(String(value).replace(/-/g,"+").replace(/_/g,"/")+"===".slice((String(value).length+3)%4)),c=>c.charCodeAt(0));
 async function sha256(bytes){return new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));}
-function bytesEqual(a,b){if(a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0;}
+function bytesEqual(a,b){const length=Math.max(a.length,b.length);let diff=a.length^b.length;for(let i=0;i<length;i++)diff|=(a[i]||0)^(b[i]||0);return diff===0;}
 function constantTimeEqual(a,b){const left=String(a||""),right=String(b||""),length=Math.max(left.length,right.length);let diff=left.length^right.length;for(let i=0;i<length;i++)diff|=(left.charCodeAt(i)||0)^(right.charCodeAt(i)||0);return diff===0;}
 function derEcdsaToRaw(signature,size=32){
   const bytes=signature instanceof Uint8Array?signature:new Uint8Array(signature);
