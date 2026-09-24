@@ -122,7 +122,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/admin/access") return json({ householdAdmin: isHouseholdAdmin(profile), systemAdmin: isSystemAdmin(profile) });
   if (request.method === "GET" && url.pathname === "/api/admin/household") { requireAdmin(profile); return json({ household: householdSummary(profile.id), devices: devicesFor(profile.id), integrations: integrationStatus(profile.id) }); }
-  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }), systemAudit: systemAdminAudit(profile), accessAudit: accessAudit(profile.id), integrationAudit: integrationAudit() }); }
+  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }), systemAudit: systemAdminAudit(profile), accessAudit: systemAccessAudit(profile), integrationAudit: integrationAudit() }); }
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
     authLimit(request,`settings-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
