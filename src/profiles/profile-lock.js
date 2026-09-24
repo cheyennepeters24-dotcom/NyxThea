@@ -103,15 +103,16 @@ export async function verifyBiometricCredential(profile,{deviceId,purpose="unloc
   if(!credential)fail("Device biometric unlock is not registered.",404);
   const challenge=readChallenge(profile,d,purpose);parseClientData(clientDataJSON,challenge,"webauthn.get");
   const auth=fromB64url(authenticatorData);if(auth.length<37)fail("Biometric response is invalid.",401);
-  const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric response is for a different site.",401);
+  const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp)||credential.rpId!==challenge.rpId)fail("Biometric response is for a different site.",401);
   if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
+  const signCount=((auth[33]<<24)>>>0)+(auth[34]<<16)+(auth[35]<<8)+auth[36];
+  const previous=Number(credential.signCount||0);if(previous>0&&signCount>0&&signCount<=previous)fail("Biometric credential counter did not advance.",401);
   const clientBytes=fromB64url(clientDataJSON),clientHash=await sha256(clientBytes),signed=new Uint8Array(auth.length+clientHash.length);signed.set(auth);signed.set(clientHash,auth.length);
   let key,algorithm;
   if(Number(credential.algorithm)===-7){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);algorithm={name:"ECDSA",hash:"SHA-256"};}
   else if(Number(credential.algorithm)===-257){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);algorithm={name:"RSASSA-PKCS1-v1_5"};}
   else fail("Unsupported biometric credential algorithm.",400);
-  const provided=Number(credential.algorithm)===-7?derEcdsaToRaw(fromB64url(signature)):fromB64url(signature);const ok=await crypto.subtle.verify(algorithm,key,provided,signed);if(!ok)fail("Biometric verification failed.",401);
-  return {ok:true,purpose};
+  const provided=Number(credential.algorithm)===-7?derEcdsaToRaw(fromB64url(signature)):fromB64url(signature);const ok=await crypto.subtle.verify(algorithm,key,provided,signed);if(!ok)fail("Biometric verification failed.",401);\n  if(signCount>0){credential.signCount=signCount;credential.lastUsedAt=now();current.updatedAt=credential.lastUsedAt;locks().set(profile.id,current);}\n  return {ok:true,purpose};
 }
 export function removeBiometricCredential(profile,{deviceId}={}){
   assertAdult(profile);
