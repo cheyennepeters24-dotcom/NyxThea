@@ -83,11 +83,14 @@ function parseClientData(value,record,expectedType){
   if(parsed.type!==expectedType||parsed.challenge!==record.challenge||parsed.origin!==record.origin)fail("Biometric response could not be verified.",401);
   return parsed;
 }
-export function addBiometricCredential(profile,{deviceId,credentialId,publicKey,algorithm=-7,label,clientDataJSON}={}){
+export async function addBiometricCredential(profile,{deviceId,credentialId,publicKey,algorithm=-7,label,clientDataJSON,authenticatorData}={}){
   assertAdult(profile);
   const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024),p=String(publicKey||"").trim();
-  if(!d||!c||!p||!clientDataJSON)fail("Device biometric credential is incomplete.");
+  if(!d||!c||!p||!clientDataJSON||!authenticatorData)fail("Device biometric credential is incomplete.");
   const challenge=readChallenge(profile,d,"register");parseClientData(clientDataJSON,challenge,"webauthn.create");
+  const auth=fromB64url(authenticatorData);if(auth.length<37)fail("Biometric registration response is invalid.",401);
+  const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric registration is for a different site.",401);
+  if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
   const current=locks().get(profile.id)||{profileId:profile.id,biometricDevices:[]};
   const devices=Array.isArray(current.biometricDevices)?current.biometricDevices:[];
   current.biometricDevices=[...devices.filter(x=>x.deviceId!==d),{deviceId:d,credentialId:c,publicKey:p,algorithm:Number(algorithm),rpId:challenge.rpId,label:String(label||"").trim().slice(0,80)||null,addedAt:now()}];
