@@ -51,7 +51,7 @@ export function developmentalStage(birthday){
 }
 export function ensureHousehold(profileId,{name}={}){
   let membership=list("household_memberships",x=>x.profileId===profileId&&x.active!==false)[0];
-  if(membership)return households().get(membership.householdId)||null;
+  if(membership){const existing=households().get(membership.householdId);if(existing)return existing;memberships().delete(`${membership.householdId}:${profileId}`);}
   const household={id:id("household"),name:clean(name,80)||"My household",mode:"personal",createdBy:profileId,createdAt:now(),updatedAt:now()};
   households().set(household.id,household);
   memberships().set(`${household.id}:${profileId}`,{householdId:household.id,profileId,role:"owner",active:true,joinedAt:now()});
