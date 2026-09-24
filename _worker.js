@@ -385,8 +385,9 @@ async function directVoiceProfile(storage,request){
   if(!profile)throw Object.assign(new Error("Authentication is required."),{status:401});
   const lock=await storage.get(durableKey("profile_locks",profile.id));
   if(lock?.enabled){
-    const deviceId=request.headers.get("x-nyxthea-device")||"";
-    if(!deviceId||!(lock.unlockedDevices||[]).includes(deviceId))throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
+    const deviceId=String(request.headers.get("x-nyxthea-device")||"").trim();
+    const unlocked=Array.isArray(lock.unlockedDevices)?lock.unlockedDevices.filter(id=>typeof id==="string"&&id.length<=128):[];
+    if(!deviceId||deviceId.length>128||!unlocked.includes(deviceId))throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
   }
   return profile;
 }
