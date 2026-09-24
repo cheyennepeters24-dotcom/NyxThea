@@ -81,3 +81,27 @@ test("household lookup repairs duplicate and orphan active memberships",()=>{
  const active=[...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false);
  assert.equal(active.length,1);assert.equal(active[0].householdId,valid.id);
 });
+
+
+test("household repair keeps the canonical membership when two valid households exist",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]});saveProfileIdentity(owner,{preferredName:"Owner"});
+ const canonical=householdSummary(owner.id),memberships=table("household_memberships"),households=table("households");
+ const other={id:"household-other",name:"Other",mode:"family",createdBy:"someone-else",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+ households.set(other.id,other);memberships.set("duplicate-other",{householdId:other.id,profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ const repaired=householdSummary(owner.id);
+ assert.equal(repaired.id,canonical.id);
+ assert.equal([...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false).length,1);
+});
+
+test("household repair removes relationships whose other endpoint is outside the surviving household",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]}),member=createProfile({displayName:"Member"}),outsider=createProfile({displayName:"Outsider"});
+ saveProfileIdentity(owner,{preferredName:"Owner"});saveProfileIdentity(member,{preferredName:"Member"});saveProfileIdentity(outsider,{preferredName:"Outsider"});
+ addPersonToHousehold(owner,member,{relationshipToRequester:"friend"});
+ const relationships=table("profile_relationships");
+ relationships.set(`${owner.id}:${outsider.id}`,{id:`${owner.id}:${outsider.id}`,fromProfileId:owner.id,toProfileId:outsider.id,type:"friend",confirmed:true,updatedAt:new Date().toISOString()});
+ householdSummary(owner.id);
+ assert.equal([...relationships.values()].some(x=>x.fromProfileId===owner.id&&x.toProfileId===outsider.id),false);
+ assert.equal([...relationships.values()].some(x=>x.fromProfileId===owner.id&&x.toProfileId===member.id),true);
+});
