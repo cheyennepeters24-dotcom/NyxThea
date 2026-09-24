@@ -15,7 +15,7 @@ async function derive(password, salt) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 210000, hash: 'SHA-256' }, key, 256));
 }
-function constantTimeEqual(a,b){const left=String(a||""),right=String(b||"");if(left.length!==right.length)return false;let diff=0;for(let i=0;i<left.length;i++)diff|=left.charCodeAt(i)^right.charCodeAt(i);return diff===0;}
+function constantTimeEqual(a,b){const left=String(a||""),right=String(b||""),length=Math.max(left.length,right.length);let diff=left.length^right.length;for(let i=0;i<length;i++)diff|=(left.charCodeAt(i)||0)^(right.charCodeAt(i)||0);return diff===0;}
 const random = () => `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`;
 const sixDigitCode=()=>String((crypto.getRandomValues(new Uint32Array(1))[0]%900000)+100000);
 function validUsername(value) { const name = String(value || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9._-]{2,31}$/.test(name)) failure('Username must be 3–32 letters, numbers, dots, dashes, or underscores.'); return name; }
