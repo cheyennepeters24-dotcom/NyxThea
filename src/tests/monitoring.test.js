@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetStateForTests } from "../state/store.js";
+import { recordCiBuildRun, resetStateForTests } from "../state/store.js";
 import { acknowledgeAuditFinding, auditFindings, decideAuditRepair, recordAuditFinding, resolveAuditFinding, verifyAuditRepair } from "../intelligence/monitoring.js";
 
 test.beforeEach(()=>resetStateForTests());
@@ -38,3 +38,5 @@ test("audit findings remain isolated to their owning profile",()=>{
   assert.equal(auditFindings("other").length,0);
   assert.throws(()=>decideAuditRepair("other",finding.id,"approve"),error=>error.status===404);
 });
+
+test("CI build health rejects malformed states and job results",()=>{assert.throws(()=>recordCiBuildRun({runId:"bad-state",status:"banana",conclusion:"success"}),error=>error.status===400);assert.throws(()=>recordCiBuildRun({runId:"bad-job",status:"completed",conclusion:"failure",jobs:[{name:"tests",result:"maybe"}]}),error=>error.status===400);const run=recordCiBuildRun({runId:"good-run",status:"completed",conclusion:"success",jobs:[{name:"tests",result:"success"}]});assert.equal(run.conclusion,"success");});
