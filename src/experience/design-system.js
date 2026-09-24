@@ -30,7 +30,7 @@ export function defaultExperience(profileId) {
   return {
     profileId, proactiveMode:"helpful", communicationStyle:"natural", soundMode:"minimal",
     motionMode:"full", lockScreenPrivacy:"private", focusMode:false, doNotDisturb:false,
-    privateConversation:false, voiceEnabled:true, handsFreeEnabled:true, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
+    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
     visibleModules:["world","devices","health","security","memories","music","vehicle"],
     pronunciation:null, preferredName:null, onboarded:false, onboardingVersion:0, updatedAt:now()
   };
