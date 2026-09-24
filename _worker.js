@@ -226,7 +226,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/permissions/check") { const input = await readJson(request),household=householdSummary(profile.id),householdAdmin=household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner"); return json(permissionDecision(profile, input.action, {...input,householdAdmin})); }
   if (request.method === "GET" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/records")) { const targetProfileId = url.pathname.split("/")[3]; const domain = url.searchParams.get("domain"); const protectedDomain = { pet: "pet_care", vehicle: "vehicle_information", wellness: "health_wellness" }[domain]; requireProfileAccess({ requester: profile, targetProfileId, domain: protectedDomain }); return json({ records: listRecords(targetProfileId, domain) }); }
   if (request.method === "POST" && url.pathname === "/api/profiles/grants") { const input = await readJson(request); if (input.from !== profile.id) return json({ error: "A profile may grant only its own protected data." }, 403); return json({ grant: grantAccess(input) }, 201); }
-  if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1)) });
+  if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1), { householdAdmin:isHouseholdAdmin(profile) }) });
   if (request.method === "GET" && url.pathname === "/api/endpoints") return json({ topology: topology(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/endpoints") { requireAdmin(profile); return json({ endpoint: registerEndpoint({ ...(await readJson(request)), ownerProfileId: profile.id }) }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/endpoints/")) return json({ deleted: removeEndpoint(profile.id, url.pathname.split("/").at(-1)) });
@@ -254,7 +254,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/learning") return json(learningStatus(profile.id));
   if (request.method === "POST" && url.pathname === "/api/opportunities/evaluate") return json(await evaluateOpportunity(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/actions") return json({ action: prepareAction(profile.id, await readJson(request)) }, 201);
-  if (request.method === "POST" && url.pathname.startsWith("/api/actions/authorize/")) return json({ action: authorizeAction(profile, url.pathname.split("/").at(-1), await readJson(request)) });
+  if (request.method === "POST" && url.pathname.startsWith("/api/actions/authorize/")) { const input=await readJson(request); return json({ action: authorizeAction(profile, url.pathname.split("/").at(-1), {...input,householdAdmin:isHouseholdAdmin(profile)}) }); }
   if (request.method === "POST" && url.pathname.startsWith("/api/actions/verify/")) return json({ action: verifyAction(profile.id, url.pathname.split("/").at(-1), await readJson(request)) });
   if (request.method === "GET" && url.pathname === "/api/actions") return json({ actions: actionStatus(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/household") return json({ item: addHouseholdItem(profile.id, await readJson(request)) }, 201);
