@@ -72,7 +72,11 @@ export function saveProfileIdentity(profile,{preferredName,pronunciation,birthda
   const parsedBirthday=birthday!==undefined?parseBirthday(birthday):previous.birthday||null;
   let celebration=birthdayMonthDay!==undefined?clean(birthdayMonthDay,5):previous.birthdayMonthDay||null;
   if(parsedBirthday)celebration=parsedBirthday.slice(5);
-  if(celebration&&!/^\d{2}-\d{2}$/.test(celebration))fail("Birthday month/day must use MM-DD.");
+  if(celebration){
+    const m=celebration.match(/^(\d{2})-(\d{2})$/);if(!m)fail("Birthday month/day must use MM-DD.");
+    const month=Number(m[1]),day=Number(m[2]),probe=new Date(Date.UTC(2000,month-1,day));
+    if(probe.getUTCMonth()!==month-1||probe.getUTCDate()!==day)fail("Birthday month/day is not a valid date.");
+  }
   const record={
     profileId:profile.id,
     preferredName:preferredName!==undefined?clean(preferredName,80):(previous.preferredName||profile.displayName),
@@ -102,8 +106,7 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
   if(relationshipToRequester)setRelationship(requester.id,profile.id,relationshipToRequester,{label:relationshipLabel});
   return householdSummary(requester.id);
 }
-export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){
-  if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");
+export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){\n  if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");\n  const fromMembership=list("household_memberships",x=>x.profileId===fromProfileId&&x.active!==false)[0],toMembership=list("household_memberships",x=>x.profileId===toProfileId&&x.active!==false)[0];\n  if(!fromMembership||!toMembership||fromMembership.householdId!==toMembership.householdId)fail("Relationships can only be set between confirmed members of the same household.",403);
   const normalized=clean(type,48).toLowerCase().replace(/\s+/g,"_");
   if(!normalized)fail("Relationship type is required.");
   const createdAt=now();
