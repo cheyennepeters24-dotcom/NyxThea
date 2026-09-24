@@ -25,7 +25,7 @@ import { prepareMusicCommand } from "./src/intelligence/music.js";
 import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
-import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
+import { hydrateDurableState, persistDurableState, snapshotDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
 import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
@@ -372,7 +372,12 @@ async function directHouseholdSpeaker(storage,requester,speakerProfileId){
   return profile;
 }
 export class NyxtheaState {
-  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); }
+  constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); this.hydrated=false; this.hydrating=null; }
+  async ensureHydrated(){
+    if(this.hydrated)return;
+    if(!this.hydrating)this.hydrating=hydrateDurableState(this.ctx.storage).then(()=>{this.hydrated=true}).finally(()=>{this.hydrating=null});
+    await this.hydrating;
+  }
   mediaAllowed(profileId,path,limit){
     const key=`${profileId}:${path}`,now=Date.now(),entry=this.mediaLimits.get(key)||{start:now,count:0};
     if(now-entry.start>=60000){entry.start=now;entry.count=0}
@@ -423,7 +428,8 @@ export class NyxtheaState {
     const url=new URL(request.url);
     if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"||url.pathname==="/api/voice/chat"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
-      const before = await hydrateDurableState(this.ctx.storage);
+      await this.ensureHydrated();
+      const before = snapshotDurableState();
       try { return await api(request, this.env, url); }
       finally { await persistDurableState(this.ctx.storage, before); }
     });
