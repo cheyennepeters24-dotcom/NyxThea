@@ -162,6 +162,7 @@ async function api(request, env, url) {
     return json({ identity: identityRecord, household: householdSummary(profile.id), settings });
   }
   if (request.method === "POST" && url.pathname === "/api/household/meet") {
+    requireAdmin(profile);
     const input = await readJson(request);
     if (!input.displayName?.trim()) return json({ error: "Tell me the new person's name first." }, 400);
     const created = createProfile({ displayName: input.displayName });
@@ -180,6 +181,7 @@ async function api(request, env, url) {
     return json({identity:identityRecord,household:householdSummary(profile.id)});
   }
   if (request.method === "POST" && url.pathname === "/api/household/relationship") {
+    requireAdmin(profile);
     const input = await readJson(request);
     const household = householdSummary(profile.id);
     if (!household.members.some(member => member.profileId === input.toProfileId)) return json({ error: "That person is not in this household." }, 404);
