@@ -49,7 +49,7 @@ async function own(request, env, action) {
       const deviceId=request.headers.get("x-nyxthea-device")||"";
       const state=deviceLockState(profile,{deviceId});
       if(state.enabled&&state.locked)throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
-    }catch(error){if(error?.status===423)throw error;}
+    }catch(error){if(error?.status!==403)throw error;}
   }
   enforceRateLimit(`${profile.id}:${path}`);
   recordAccess({ profileId: profile.id, action });
@@ -175,7 +175,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/devices") return json({ devices: devicesFor(profile.id) });
   if (request.method === "GET" && url.pathname === "/api/profile-lock") {
     const deviceId=url.searchParams.get("deviceId")||"";
-    let state=null; try { state=deviceLockState(profile,{deviceId}); } catch { state={enabled:false,locked:false}; }
+    let state=null; try { state=deviceLockState(profile,{deviceId}); } catch(error) { if(error?.status===403)state={enabled:false,locked:false}; else throw error; }
     return json({ lock: profileLock(profile), state });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/pin") { const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await setProfilePin(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) }); }
@@ -200,7 +200,7 @@ async function api(request, env, url) {
     return json(payload);
   }
   if (request.method === "DELETE" && url.pathname === "/api/profile-lock/biometric") {
-    const input=await readJson(request); return json({ lock:removeBiometricCredential(profile,input) });
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); return json({ lock:removeBiometricCredential(profile,input) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/lock-device") {
     const input=await readJson(request); return json({ lock:markDeviceLocked(profile,input) });
