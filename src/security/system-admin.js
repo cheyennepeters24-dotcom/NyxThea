@@ -13,7 +13,7 @@ export function ensureInitialSystemAdmin(profile, bootstrapProfileId){
   const target=String(bootstrapProfileId||"").trim();
   if(!target||!profile?.id||profile.id!==target)return null;
   const active=list("system_admins",grant=>grant?.active===true);
-  if(active.length)return admins().get(profile.id)||null;
+  if(active.length)return null;
   return provisionSystemAdmin({actorProfileId:"deployment-bootstrap",profileId:profile.id,label:"Initial system administrator",reason:"trusted deployment bootstrap"});
 }
 
