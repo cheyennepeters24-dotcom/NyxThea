@@ -533,6 +533,36 @@ const NYXExperience={
 };
 document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.settings?.voiceAssistantMode!==false){state("ready","Tap Start NYX to resume voice")}});
 window.addEventListener("pagehide",()=>{NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)});
-window.addEventListener("load",async()=>{await restoreSession();if(credential)await NYXExperience.load();NYXExperience.initMic();const unlocked=credential?await enforceProfileLock():true;const needs=unlocked&&credential&&NYXExperience.needsOnboarding();setTimeout(()=>{document.getElementById("nyxLaunch")?.classList.add("done");if(needs)setTimeout(()=>NYXExperience.onboard(),350);else if(!credential)setTimeout(()=>unlock(),350);else if(unlocked&&NYXExperience.settings?.voiceAssistantMode!==false)setTimeout(()=>NYXExperience.startVoiceSession(),250)},3600)});
+function dismissNyxLaunch(){document.getElementById("nyxLaunch")?.classList.add("done")}
+window.addEventListener("load",()=>{
+  const launchTimer=setTimeout(dismissNyxLaunch,3200);
+  setTimeout(dismissNyxLaunch,5200);
+  void (async()=>{
+    let unlocked=true,needs=false;
+    try{
+      await restoreSession();
+      if(credential)await NYXExperience.load();
+      NYXExperience.initMic();
+      unlocked=credential?await enforceProfileLock():true;
+      needs=Boolean(unlocked&&credential&&NYXExperience.needsOnboarding());
+    }catch(e){
+      console.error("Nyx startup recovered from an initialization error.",e);
+      NYXExperience.initMic();
+    }finally{
+      clearTimeout(launchTimer);
+      dismissNyxLaunch();
+    }
+    setTimeout(()=>{
+      try{
+        if(needs)NYXExperience.onboard();
+        else if(!credential)unlock();
+        else if(unlocked&&NYXExperience.settings?.voiceAssistantMode!==false)NYXExperience.startVoiceSession();
+      }catch(e){
+        console.error("Nyx post-launch recovery.",e);
+        state("ready","Ready when you are");
+      }
+    },250);
+  })();
+});
 
 </script></body></html>
