@@ -238,7 +238,7 @@ test('household owner can manage integrations and save interface modules without
 });
 
 
-test('real household owner can revoke a member grant without a legacy admin flag', async () => {
+test('household owner cannot revoke a grant to an external recipient', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method:'POST', data:{ username:'grant-owner', displayName:'Owner', password:'grant-owner-password-123' } });
   const info=await body(signup),cookie=signup.headers.get('set-cookie').split(';')[0],device='grant-owner-phone';
@@ -248,9 +248,9 @@ test('real household owner can revoke a member grant without a legacy admin flag
     id:'grant_household_member',from:met.profile.id,to:'external-recipient',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
   });
   const revoked=await call('/api/profiles/grants/grant_household_member',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
-  assert.equal(revoked.status,200);
-  assert.equal((await body(revoked)).revoked,true);
-  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,info.profile.id);
+  assert.equal(revoked.status,403);
+  assert.equal(table('profile_grants').get('grant_household_member').active,true);
+  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,null);
 });
 
 test('device trust changes require fresh Settings verification', async () => {
