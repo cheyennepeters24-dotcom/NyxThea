@@ -21,7 +21,7 @@ export const soundModes = Object.freeze(["off","minimal","full"]);
 export const motionModes = Object.freeze(["full","reduced","minimal"]);
 export const lockScreenPrivacy = Object.freeze(["full","private","hidden"]);
 export const attentionLevels = Object.freeze(["critical","time_sensitive","important","useful","background"]);
-export const interfaceModules = Object.freeze(["world","devices","health","security","memories","music","vehicle","apple_siri_iphone","amazon_alexa_echo","google_nest","smart_home","wearable","computer","health_data","pet_care","emergency_contacts"]);
+export const interfaceModules = Object.freeze(["world","devices","health","security","memories","music","vehicle","apple_siri_iphone","amazon_alexa_echo","google_nest","smart_home","tv","wearable","computer","health_data","pet_care","emergency_contacts"]);
 
 const settings = () => table("experience_settings");
 const later = () => table("later_queue");
