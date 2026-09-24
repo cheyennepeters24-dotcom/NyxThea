@@ -112,7 +112,7 @@ export async function verifyBiometricCredential(profile,{deviceId,purpose="unloc
   const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp)||credential.rpId!==challenge.rpId)fail("Biometric response is for a different site.",401);
   if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
   const signCount=((auth[33]<<24)>>>0)+(auth[34]<<16)+(auth[35]<<8)+auth[36];
-  const previous=Number(credential.signCount||0);if(previous>0&&signCount>0&&signCount<=previous)fail("Biometric credential counter did not advance.",401);
+  const previous=Number(credential.signCount||0);if(previous>0&&signCount<=previous)fail("Biometric credential counter did not advance.",401);
   const clientBytes=fromB64url(clientDataJSON);if(clientBytes.length>8192)fail("Biometric client data is too large.",401);const clientHash=await sha256(clientBytes),signed=new Uint8Array(auth.length+clientHash.length);signed.set(auth);signed.set(clientHash,auth.length);
   let key,algorithm;
   if(Number(credential.algorithm)===-7){key=await crypto.subtle.importKey("spki",fromB64url(credential.publicKey),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]);algorithm={name:"ECDSA",hash:"SHA-256"};}
