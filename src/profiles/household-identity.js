@@ -51,9 +51,9 @@ export function developmentalStage(birthday){
 }
 function normalizeMembership(profileId){
   const active=[...memberships()].filter(([,m])=>m.profileId===profileId&&m.active!==false),valid=active.filter(([,m])=>households().has(m.householdId));
-  const chosen=valid[0]||null;
-  for(const [key,membership] of active)if(!chosen||key!==chosen[0])memberships().delete(key);
-  if(chosen){for(const [key,relationship] of relationships())if((relationship.fromProfileId===profileId||relationship.toProfileId===profileId)&&!list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).some(m=>m.profileId===relationship.fromProfileId)&&!list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).some(m=>m.profileId===relationship.toProfileId))relationships().delete(key);return chosen[1];}
+  const ranked=[...valid].sort(([aKey,a],[bKey,b])=>{const aHouse=households().get(a.householdId),bHouse=households().get(b.householdId);const aScore=(aKey===\`${a.householdId}:${profileId}\`?2:0)+(aHouse?.createdBy===profileId?1:0),bScore=(bKey===\`${b.householdId}:${profileId}\`?2:0)+(bHouse?.createdBy===profileId?1:0);return bScore-aScore||aKey.localeCompare(bKey);}),chosen=ranked[0]||null;
+  for(const [key] of active)if(!chosen||key!==chosen[0])memberships().delete(key);
+  if(chosen){const memberIds=new Set(list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).map(m=>m.profileId));for(const [key,relationship] of relationships())if((relationship.fromProfileId===profileId||relationship.toProfileId===profileId)&&(!memberIds.has(relationship.fromProfileId)||!memberIds.has(relationship.toProfileId)))relationships().delete(key);return chosen[1];}
   return null;
 }
 export function ensureHousehold(profileId,{name}={}){
@@ -115,7 +115,7 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
 }
 export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){
   if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");
-  const fromMembership=list("household_memberships",x=>x.profileId===fromProfileId&&x.active!==false)[0],toMembership=list("household_memberships",x=>x.profileId===toProfileId&&x.active!==false)[0];
+  const fromMembership=normalizeMembership(fromProfileId),toMembership=normalizeMembership(toProfileId);
   if(!fromMembership||!toMembership||fromMembership.householdId!==toMembership.householdId)fail("Relationships can only be set between confirmed members of the same household.",403);
   const normalized=clean(type,48).toLowerCase().replace(/\s+/g,"_");
   if(!normalized)fail("Relationship type is required.");
