@@ -129,6 +129,8 @@ test('adult Settings require fresh verification and child profiles are denied', 
   assert.equal(pinSet.status, 200);
   const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
   assert.ok(pinVerified.authorization.token);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device},data:{deviceId:device}})).status,403);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verified.authorization.token},data:{deviceId:device}})).status,200);
 
   const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
   const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
@@ -200,18 +202,19 @@ test('household owner can manage integrations and save interface modules without
 });
 
 
-test('real household owner can revoke a protected-data grant without a legacy admin flag', async () => {
+test('real household owner can revoke a member grant without a legacy admin flag', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method:'POST', data:{ username:'grant-owner', displayName:'Owner', password:'grant-owner-password-123' } });
   const info=await body(signup),cookie=signup.headers.get('set-cookie').split(';')[0],device='grant-owner-phone';
   assert.deepEqual(info.profile.permissions,[]);
-  table('profile_grants').set('grant_external_members',{
-    id:'grant_external_members',from:'member-a',to:'member-b',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
+  const met=await body(await call('/api/household/meet',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{displayName:'Member',birthday:'2000-01-01',relationshipToRequester:'child'}}));
+  table('profile_grants').set('grant_household_member',{
+    id:'grant_household_member',from:met.profile.id,to:'external-recipient',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
   });
-  const revoked=await call('/api/profiles/grants/grant_external_members',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
+  const revoked=await call('/api/profiles/grants/grant_household_member',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
   assert.equal(revoked.status,200);
   assert.equal((await body(revoked)).revoked,true);
-  assert.equal(table('profile_grants').get('grant_external_members').revokedBy,info.profile.id);
+  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,info.profile.id);
 });
 
 test('device trust changes require fresh Settings verification', async () => {
