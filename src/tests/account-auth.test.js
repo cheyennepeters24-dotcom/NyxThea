@@ -116,6 +116,14 @@ test('a household invite claims the existing profile instead of creating a dupli
 });
 
 
+test('protected cross-profile records reject unknown domains', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'domain-owner', displayName: 'Domain Owner', password: 'domain-owner-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const session = await body(await call('/api/auth/session', { cookie }));
+  assert.equal((await call(`/api/profiles/${session.profile.id}/records?domain=unknown`, { cookie })).status, 400);
+});
+
 test('child household members cannot add people or rewrite relationships', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const ownerSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'family-admin', displayName: 'Parent', password: 'family-admin-password-123' } });
