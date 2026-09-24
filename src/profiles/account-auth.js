@@ -168,8 +168,8 @@ export async function recoverAccount({ username, recoveryCode, newPassword }) {
   const name = String(username || '').trim().toLowerCase();
   validPassword(newPassword);
   const record = accounts().get(name);
-  const actual = await digest(String(recoveryCode || ''));
-  if (!record || !record.recoveryHash || !constantTimeEqual(record.recoveryHash, actual)) failure('Recovery details are incorrect.', 401);
+  const actual = await digest(String(recoveryCode || '')), expected = record?.recoveryHash || await digest('nyxthea-missing-recovery-code');
+  if (!record || !record.recoveryHash || !constantTimeEqual(expected, actual)) failure('Recovery details are incorrect.', 401);
   const salt = random(), passwordHash = await derive(newPassword, salt), nextCode = random();
   record.salt = salt; record.passwordHash = passwordHash; record.recoveryHash = await digest(nextCode);
   for (const [key, session] of sessions()) if (session.profileId === record.profileId) sessions().delete(key);
