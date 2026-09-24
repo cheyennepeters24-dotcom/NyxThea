@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetStateForTests } from "../state/store.js";
+import { resetStateForTests, table } from "../state/store.js";
 import { createProfile } from "../profiles/profiles.js";
 import { addPersonToHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship } from "../profiles/household-identity.js";
 
@@ -55,4 +55,16 @@ test("partial birthdays and relationships reject invalid identity data",()=>{
   assert.throws(()=>saveProfileIdentity(adult,{birthdayMonthDay:"02-30"}),/valid date/);
   const outsider=createProfile({displayName:"Outsider"});
   assert.throws(()=>setRelationship(adult.id,outsider.id,"friend"),/same household/);
+});
+
+
+test("household move clears prior relationship records",()=>{
+ resetStateForTests();
+ const a=createProfile({displayName:"A",permissions:["household_admin"]}),b=createProfile({displayName:"B"}),c=createProfile({displayName:"C",permissions:["household_admin"]});
+ saveProfileIdentity(a,{preferredName:"A"});saveProfileIdentity(b,{preferredName:"B"});saveProfileIdentity(c,{preferredName:"C"});
+ addPersonToHousehold(a,b,{relationshipToRequester:"friend"});
+ assert.equal([...table("profile_relationships").values()].filter(x=>x.fromProfileId===b.id||x.toProfileId===b.id).length,2);
+ addPersonToHousehold(c,b,{relationshipToRequester:"friend"});
+ const edges=[...table("profile_relationships").values()].filter(x=>x.fromProfileId===b.id||x.toProfileId===b.id);
+ assert.equal(edges.length,2);assert.ok(edges.every(x=>x.fromProfileId===c.id||x.toProfileId===c.id));
 });
