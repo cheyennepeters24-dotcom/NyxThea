@@ -27,7 +27,7 @@ import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
 import { selfMonitor, explainFailure, recordCiBuildRun, ciBuildRuns } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
-import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
+import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, authFailureLimitCheck, authFailureLimitRecord, authFailureLimitReset, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
 import { analyzeLiveGuide, liveGuideSessions, startLiveGuide, stopLiveGuide } from "./src/architecture/live-guide.js";
 import { NYXTHEA_PRINCIPLES, experienceSettings, updateExperience, rosePresentation, queueLater, laterItems, resolveLater } from "./src/experience/design-system.js";
 import { interpretTurn, recoveryLanguage } from "./src/experience/conversation.js";
@@ -94,7 +94,17 @@ async function api(request, env, url) {
   }
   if (request.method === "POST" && ["/api/auth/register", "/api/auth/login", "/api/auth/logout", "/api/auth/recover", "/api/auth/claim", "/api/auth/recover-email/start", "/api/auth/recover-email/complete"].includes(url.pathname) && !sameOrigin(request)) return json({ error: "Same-origin request required." }, 403);
   if (request.method === "POST" && url.pathname === "/api/auth/register") { authLimit(request, "register", 20, 3600000); const result = await registerAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 201, { "set-cookie": sessionCookie(result.token) }); }
-  if (request.method === "POST" && url.pathname === "/api/auth/login") { authLimit(request, "login", 10, 900000); const result = await loginAccount(await readJson(request)); return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) }); }
+  if (request.method === "POST" && url.pathname === "/api/auth/login") {
+    authFailureLimitCheck(request, "login", 10, 900000);
+    try {
+      const result = await loginAccount(await readJson(request));
+      authFailureLimitReset(request, "login");
+      return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) });
+    } catch (error) {
+      if (error?.status === 401) authFailureLimitRecord(request, "login", 900000);
+      throw error;
+    }
+  }
   if (request.method === "POST" && url.pathname === "/api/auth/claim") { authLimit(request, "claim", 10, 900000); const result = await claimProfileAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover") { authLimit(request, "recover", 5, 900000); const result = await recoverAccount(await readJson(request)); return json({ profile: result.profile, recoveryCode: result.recoveryCode }, 200, { "set-cookie": sessionCookie(result.token) }); }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/start") {
@@ -364,6 +374,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || !text.trim() || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/memories/")) return json({ deleted: memory.forget(url.pathname.split("/").at(-1)) });
   if (request.method === "DELETE" && url.pathname === "/api/memories") return json({ deleted: memory.clear(url.searchParams.get("layer") || undefined) });
+  if (request.method === "GET" && url.pathname === "/api/conversation/recent") return json({ conversation: recentTurns(profile.id, 24) });
   if (request.method === "POST" && url.pathname === "/api/conversation/state") return json({ state: setConversationState(profile.id, (await readJson(request)).mode) });
   if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
   return json({ error: "Not found." }, 404);
