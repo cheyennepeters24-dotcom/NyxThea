@@ -162,6 +162,32 @@ export function authLimit(request, action, limit, windowMs) {
   records.set(key, entry);
   if (entry.count > limit) failure('Too many attempts. Please try again later.', 429);
 }
+
+function authFailureKey(request, action) {
+  const source = request.headers.get('cf-connecting-ip') || 'unknown';
+  return `${action}:${source}`;
+}
+export function authFailureLimitCheck(request, action, limit, windowMs) {
+  const records = table('auth_rate_limits');
+  const key = authFailureKey(request, action);
+  const entry = records.get(key);
+  if (!entry) return;
+  if (Date.now() - entry.start >= windowMs) { records.delete(key); return; }
+  if (entry.count >= limit) failure('Too many attempts. Please try again later.', 429);
+}
+export function authFailureLimitRecord(request, action, windowMs) {
+  const records = table('auth_rate_limits');
+  const key = authFailureKey(request, action);
+  const timestamp = Date.now();
+  const entry = records.get(key) || { start: timestamp, count: 0 };
+  if (timestamp - entry.start >= windowMs) { entry.start = timestamp; entry.count = 0; }
+  entry.count += 1;
+  records.set(key, entry);
+  return entry.count;
+}
+export function authFailureLimitReset(request, action) {
+  table('auth_rate_limits').delete(authFailureKey(request, action));
+}
 export function sameOrigin(request) {
   const origin = request.headers.get('origin');
   return origin === new URL(request.url).origin;
