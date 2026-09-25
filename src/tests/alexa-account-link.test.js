@@ -25,6 +25,9 @@ test('Alexa linking requires consent, registered redirect, client secret and one
   const fields = { client_id: 'nyx-alexa', redirect_uri: redirect, response_type: 'code', state: 'state123', approve: 'yes' };
   const params = new URLSearchParams(fields);
   assert.equal((await call(`/api/alexa/authorize?${params}`)).status, 200);
+  const credentialApproval = await call('/api/alexa/authorize', { method:'POST', headers:{ origin:'https://nyxthea.test', 'cf-connecting-ip':'203.0.113.25' }, body:new URLSearchParams({ ...fields, username:'alexa-tester', password:'a-very-long-password-123' }) });
+  assert.equal(credentialApproval.status,302);
+  assert.equal(table('auth_rate_limits').get('alexa-login:203.0.113.25'),undefined);
   assert.equal((await call(`/api/alexa/authorize?${new URLSearchParams({ ...fields, redirect_uri: 'https://evil.test/' })}`)).status, 400);
   assert.equal((await call('/api/alexa/authorize', { method: 'POST', headers: { origin: 'https://evil.test', cookie }, body: params })).status, 403);
   const approval = await call('/api/alexa/authorize', { method: 'POST', headers: { origin: 'https://nyxthea.test', cookie }, body: params });
