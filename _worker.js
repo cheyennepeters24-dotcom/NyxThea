@@ -318,22 +318,34 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
   if (request.method === "POST" && url.pathname === "/api/voice/chat") {
-    const { message } = await readJson(request);
+    const { message, speakerProfileId } = await readJson(request);
     if (typeof message !== "string" || !message.trim() || message.length > 1200) return json({ error: "Message must be 1–1200 characters." }, 400);
+    let speaker=profile;
+    const targetId=String(speakerProfileId||"").trim();
+    if(targetId&&targetId!==profile.id){
+      if(profile.role==="child")return json({error:"A child session cannot switch to another household speaker."},403);
+      const household=householdSummary(profile.id);
+      if(!household.members.some(member=>member.profileId===targetId))return json({error:"That speaker is not in this household."},403);
+      const target=profileById(targetId);
+      if(!target)return json({error:"That household profile is unavailable."},404);
+      if(target.role!=="child")return json({error:"An adult speaker must sign in to their own profile."},403);
+      speaker=target;
+    }
+    enforceRateLimit(`${speaker.id}:voice-chat`,{limit:60,windowMs:60000});
     const prompt=message.trim();
-    recordTurn(profile.id,"user",prompt);
-    const education=educationGuidance(profile,prompt);
-    if(!education.allowed){recordTurn(profile.id,"assistant",education.response);return json({answer:education.response,type:"education_guardrail"});}
+    recordTurn(speaker.id,"user",prompt);
+    const education=educationGuidance(speaker,prompt);
+    if(!education.allowed){recordTurn(speaker.id,"assistant",education.response);return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});}
     try{
-      const context=buildContext({conversation:recentTurns(profile.id).slice(-4)});
+      const context=buildContext({conversation:recentTurns(speaker.id).slice(-4)});
       const response=await Promise.race([
         converseFast(env.AI,prompt,context),
         new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),8000))
       ]);
-      if(response.text)recordTurn(profile.id,"assistant",response.text);
-      return json({answer:response.text,modelUsed:response.modelUsed,fast:true});
+      if(response.text)recordTurn(speaker.id,"assistant",response.text);
+      return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
     }catch{
-      return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true});
+      return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true,speakerProfileId:speaker.id});
     }
   }
   if (request.method === "POST" && url.pathname === "/api/voice/speak") {
@@ -403,17 +415,6 @@ async function directVoiceProfile(storage,request){
   }
   return profile;
 }
-async function directHouseholdSpeaker(storage,requester,speakerProfileId){
-  const targetId=String(speakerProfileId||"").trim();if(!targetId||targetId===requester.id)return requester;
-  if(requester.role==="child")throw Object.assign(new Error("A child session cannot switch to another household speaker."),{status:403});
-  const rows=await storage.list({prefix:"nyxthea-state:household_memberships:"});
-  const memberships=[...rows.values()].filter(x=>x?.active!==false&&typeof x?.householdId==="string"&&x.householdId&&typeof x?.profileId==="string"&&x.profileId);
-  const own=memberships.filter(x=>x.profileId===requester.id),target=memberships.filter(x=>x.profileId===targetId);
-  if(!own.length||!target.length||!own.some(a=>target.some(b=>a.householdId===b.householdId)))throw Object.assign(new Error("That speaker is not in this household."),{status:403});
-  const profile=await storage.get(durableKey("profiles",targetId));if(!profile)throw Object.assign(new Error("That household profile is unavailable."),{status:404});
-  if(profile.role!=="child")throw Object.assign(new Error("An adult speaker must sign in to their own profile."),{status:403});
-  return profile;
-}
 export class NyxtheaState {
   constructor(ctx, env) { this.ctx = ctx; this.env = env; this.queue = Promise.resolve(); this.mediaLimits = new Map(); this.hydrated=false; this.hydrating=null; this.persistedState=null; }
   async ensureHydrated(){
@@ -439,18 +440,6 @@ export class NyxtheaState {
           return json({text:String(result?.text||"").trim().slice(0,4000)});
         }catch{return json({error:"Voice transcription could not finish."},503)}
       }
-      if(url.pathname==="/api/voice/chat"){
-        if(!this.mediaAllowed(profile.id,url.pathname,60))return json({answer:"Give me a second and ask that again.",degraded:true,fast:true},429);
-        const {message,speakerProfileId}=await readJson(request),prompt=String(message||"").trim();
-        if(!prompt||prompt.length>1200)return json({error:"Message must be 1–1200 characters."},400);
-        const speaker=await directHouseholdSpeaker(this.ctx.storage,profile,speakerProfileId);
-        const education=educationGuidance(speaker,prompt); if(!education.allowed)return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});
-        if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true,speakerProfileId:speaker.id},503);
-        try{
-          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),8000))]);
-          return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
-        }catch{return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true})}
-      }
       if(url.pathname==="/api/voice/speak"){
         if(!this.env.AI)return json({error:"Natural voice is unavailable right now."},503);
         if(!this.mediaAllowed(profile.id,url.pathname,60))return json({error:"Voice output is cooling down for a moment."},429);
@@ -472,7 +461,7 @@ export class NyxtheaState {
   }
   fetch(request) {
     const url=new URL(request.url);
-    if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"||url.pathname==="/api/voice/chat"))return this.fastMedia(request,url);
+    if(request.method==="POST"&&(url.pathname==="/api/voice/transcribe"||url.pathname==="/api/voice/speak"))return this.fastMedia(request,url);
     const run = this.queue.then(async () => {
       await this.ensureHydrated();
       try {
