@@ -110,6 +110,7 @@ export async function verifyBiometricCredential(profile,{deviceId,purpose="unloc
   const challenge=readChallenge(profile,d,purpose);parseClientData(clientDataJSON,challenge,"webauthn.get");
   const auth=fromB64url(authenticatorData);if(auth.length<37||auth.length>16384)fail("Biometric response is invalid.",401);
   const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp)||credential.rpId!==challenge.rpId)fail("Biometric response is for a different site.",401);
+  if((auth[32]&0x01)===0)fail("Device user presence was not confirmed.",401);
   if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
   const signCount=((auth[33]<<24)>>>0)+(auth[34]<<16)+(auth[35]<<8)+auth[36];
   const previous=Number(credential.signCount||0);if(previous>0&&signCount<=previous)fail("Biometric credential counter did not advance.",401);
