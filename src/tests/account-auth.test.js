@@ -380,3 +380,39 @@ test('System Admin diagnostics stay isolated from ordinary household profiles', 
   table('ci_build_runs').set('run-1',{runId:'run-1',status:'completed',conclusion:'success',url:'https://github.com/example/repo/actions/runs/1',jobs:[],receivedAt:new Date().toISOString()});
   const allowed=await call('/api/admin/system',{cookie});assert.equal(allowed.status,200);const data=await body(allowed);assert.equal(data.buildHealth[0].runId,'run-1');
 });
+
+
+test('successful logins do not consume the failed-login throttle budget', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'login-budget', displayName:'Budget', password:'login-budget-password-123' } });
+  assert.equal(signup.status,201);
+  const ok1 = await call('/api/auth/login', { method:'POST', headers:{'cf-connecting-ip':'203.0.113.10'}, data:{username:'login-budget',password:'login-budget-password-123'} });
+  const ok2 = await call('/api/auth/login', { method:'POST', headers:{'cf-connecting-ip':'203.0.113.10'}, data:{username:'login-budget',password:'login-budget-password-123'} });
+  assert.equal(ok1.status,200); assert.equal(ok2.status,200);
+  assert.equal(table('auth_rate_limits').get('login:203.0.113.10'), undefined);
+  const bad = await call('/api/auth/login', { method:'POST', headers:{'cf-connecting-ip':'203.0.113.10'}, data:{username:'login-budget',password:'wrong-password'} });
+  assert.equal(bad.status,401);
+  assert.equal(table('auth_rate_limits').get('login:203.0.113.10').count,1);
+  const ok3 = await call('/api/auth/login', { method:'POST', headers:{'cf-connecting-ip':'203.0.113.10'}, data:{username:'login-budget',password:'login-budget-password-123'} });
+  assert.equal(ok3.status,200);
+  assert.equal(table('auth_rate_limits').get('login:203.0.113.10'), undefined);
+});
+
+test('recent conversation history is isolated to the signed-in profile', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const first = await call('/api/auth/register', { method:'POST', data:{username:'history-one',displayName:'One',password:'history-one-password-123'} });
+  const second = await call('/api/auth/register', { method:'POST', data:{username:'history-two',displayName:'Two',password:'history-two-password-123'} });
+  const firstInfo=await body(first),secondInfo=await body(second);
+  table('conversation_turns').set('turn_first',{id:'turn_first',profileId:firstInfo.profile.id,role:'user',text:'first private turn',at:'2026-01-01T00:00:00.000Z'});
+  table('conversation_turns').set('turn_second',{id:'turn_second',profileId:secondInfo.profile.id,role:'user',text:'second private turn',at:'2026-01-01T00:00:01.000Z'});
+  const firstHistory=await body(await call('/api/conversation/recent',{cookie:first.headers.get('set-cookie').split(';')[0]}));
+  const secondHistory=await body(await call('/api/conversation/recent',{cookie:second.headers.get('set-cookie').split(';')[0]}));
+  assert.deepEqual(firstHistory.conversation.map(turn=>turn.text),['first private turn']);
+  assert.deepEqual(secondHistory.conversation.map(turn=>turn.text),['second private turn']);
+});
+
+test('browser security policy permits blob-backed natural voice audio', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const response=await call('/');
+  assert.match(response.headers.get('content-security-policy')||'',/media-src 'self' blob:/);
+});
