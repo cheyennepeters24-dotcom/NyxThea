@@ -9,7 +9,7 @@ export const CORE_VOICE=Object.freeze({
   target:"human, grounded, warm, capable"
 });
 const sessions=()=>table("voice_sessions");
-export function assessWakeContext({phrase="",confidence=0,authorizedNicknames=[],contextConfidence=0}){
+export function assessWakeContext({phrase="",confidence=0,contextConfidence=0}){
  const normalized=phrase.trim().toLowerCase(),recognized=wakeWords.includes(normalized);
  const safeToRespond=recognized&&Number(confidence)>=.7&&Number(contextConfidence)>=.6;
  return {recognized,safeToRespond,response:safeToRespond?"session_may_start":"remain_quiet"};
@@ -17,7 +17,7 @@ export function assessWakeContext({phrase="",confidence=0,authorizedNicknames=[]
 // An explicit address is enough to engage NyxThea. If words follow the alias,
 // pass them through as the request instead of rejecting natural phrasing.
 // Browser recognition is convenience only and never grants authorization.
-export function assessWakeTranscript({transcript="",confidence=0,authorizedNicknames=[]}={}){
+export function assessWakeTranscript({transcript="",confidence=0}={}){
  const aliases=[...wakeWords];
  const spoken=String(transcript).trim().replace(/[.!?]+$/,"");
  for(const alias of aliases){
