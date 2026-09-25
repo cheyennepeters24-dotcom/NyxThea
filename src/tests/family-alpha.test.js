@@ -83,7 +83,7 @@ test("household lookup repairs duplicate and orphan active memberships",()=>{
 });
 
 
-test("household repair keeps the canonical membership when two valid households exist",()=>{
+test("household repair selects the canonical household and preserves other valid memberships",()=>{
  resetStateForTests();
  const owner=createProfile({displayName:"Owner",permissions:["household_admin"]});saveProfileIdentity(owner,{preferredName:"Owner"});
  const canonical=householdSummary(owner.id),memberships=table("household_memberships"),households=table("households");
@@ -91,7 +91,13 @@ test("household repair keeps the canonical membership when two valid households 
  households.set(other.id,other);memberships.set("duplicate-other",{householdId:other.id,profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
  const repaired=householdSummary(owner.id);
  assert.equal(repaired.id,canonical.id);
- assert.equal([...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false).length,1);
+ assert.equal([...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false).length,2);
+ const member=createProfile({displayName:"Other household member"});
+ memberships.set(`${other.id}:${member.id}`,{householdId:other.id,profileId:member.id,role:"member",active:true});
+ const relationId=`${owner.id}:${member.id}`;
+ table("profile_relationships").set(relationId,{id:relationId,fromProfileId:owner.id,toProfileId:member.id,type:"friend"});
+ householdSummary(owner.id);
+ assert.ok(table("profile_relationships").has(relationId));
 });
 
 test("household repair removes relationships whose other endpoint is outside the surviving household",()=>{

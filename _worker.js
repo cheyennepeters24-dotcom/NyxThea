@@ -6,7 +6,7 @@ import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
 import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit, systemAccessAudit } from "./src/profiles/profiles.js";
-import { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
+import { addPersonToHousehold, developmentalStage, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
 import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
@@ -58,11 +58,11 @@ async function own(request, env, action) {
   recordAccess({ profileId: profile.id, action });
   return profile;
 }
-function isHouseholdAdmin(profile) { const household=householdSummary(profile.id); return Boolean(profile.permissions.includes("household_admin")||household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner")); }
+function isHouseholdAdmin(profile) { const identity=profileIdentity(profile.id); if(profile.role==="child"||(identity?.birthday&&identity.developmentalStage!=="adult"))return false; const household=householdSummary(profile.id); return Boolean(profile.permissions.includes("household_admin")||household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner")); }
 function requireAdmin(profile) { if (!isHouseholdAdmin(profile)) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
 function requireAdultProfile(profile) {
   const identityRecord=profileIdentity(profile.id);
-  const adult=identityRecord?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin");
+  const adult=profile.role!=="child"&&(identityRecord?.birthday?identityRecord.developmentalStage==="adult":profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin"));
   if(!adult)throw Object.assign(new Error("Adult verification is required for Settings."),{status:403});
 }
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
@@ -162,6 +162,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/household/identity") {
     const input = await readJson(request), existingIdentity=profileIdentity(profile.id);
     if(existingIdentity?.developmentalStage!=="adult"&&existingIdentity?.birthday&&input.birthday!==undefined&&input.birthday!==existingIdentity.birthday)return json({error:"A child profile's birthday can only be changed by a household adult."},403);
+    if(profile.role==="child"&&!existingIdentity?.birthday&&input.birthday&&developmentalStage(String(input.birthday))==="adult")return json({error:"A child profile cannot change itself into an adult profile."},403);
     const identityRecord = saveProfileIdentity(profile, input);
     const experiencePatch = {};
     if (input.preferredName !== undefined) experiencePatch.preferredName = input.preferredName;
@@ -244,7 +245,7 @@ async function api(request, env, url) {
   if (request.method === "GET" && url.pathname === "/api/world/facts") return json({ facts: worldFacts(profile.id, { entityType: url.searchParams.get("type") || undefined, includeStale: url.searchParams.get("stale") === "true" }), summary: worldSummary(profile.id) });
   if (request.method === "GET" && url.pathname === "/api/world/changes") return json({ changes: changedSince(profile.id, url.searchParams.get("since")) });
   if (request.method === "POST" && url.pathname === "/api/person") return json({ person: configurePerson(profile, await readJson(request)) });
-  if (request.method === "POST" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/person")) { requireAdmin(profile); const target = profileById(url.pathname.split("/")[3]); if (!target) return json({ error: "Profile not found." }, 404); return json({ person: configurePerson(target, await readJson(request), { allowRole: true }) }); }
+  if (request.method === "POST" && /^\/api\/profiles\/[^/]+\/person$/.test(url.pathname)) { requireAdmin(profile); const targetId = url.pathname.split("/")[3]; const household = householdSummary(profile.id); if (!household.members.some(member => member.profileId === targetId)) return json({ error: "That person is not in this household." }, 404); const target = profileById(targetId); if (!target) return json({ error: "Profile not found." }, 404); return json({ person: configurePerson(target, await readJson(request), { allowRole: true }) }); }
   if (request.method === "GET" && url.pathname === "/api/person") return json({ person: publicPerson(personModel(profile.id)) });
   if (request.method === "POST" && url.pathname === "/api/person/preferences") return json(updatePreference(profile.id, await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/intelligence/context") { const input = await readJson(request); const context = detectContext(input.message || "", input.context); return json({ context, intent: protectIntent(input.message || "", context) }); }

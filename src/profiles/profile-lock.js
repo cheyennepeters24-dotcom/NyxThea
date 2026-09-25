@@ -33,7 +33,7 @@ function derEcdsaToRaw(signature,size=32){
 }
 function assertAdult(profile){
   const identity=profileIdentity(profile.id);
-  const adult=identity?.developmentalStage==="adult"||profile.role==="adult"||profile.role==="owner"||profile.permissions?.includes("household_admin");
+  const adult=profile.role!=="child"&&(identity?.birthday?identity.developmentalStage==="adult":profile.role==="adult"||profile.role==="owner"||profile.permissions?.includes("household_admin"));
   if(!adult)fail("Adult profile lock settings are only available to adult profiles.",403);
 }
 export function profileLock(profile){

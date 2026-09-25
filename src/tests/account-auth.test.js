@@ -46,6 +46,50 @@ test('registration creates a persistent private session without an owner claim',
   assert.equal((await body(await call('/api/auth/session', { cookie }))).profile, null);
 });
 
+test('household administrator cannot edit a profile from another household', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const first = await call('/api/auth/register', { method: 'POST', data: { username: 'first-owner', displayName: 'First', password: 'first-owner-password-123' } });
+  const firstCookie = first.headers.get('set-cookie').split(';')[0];
+  const second = await call('/api/auth/register', { method: 'POST', data: { username: 'second-owner', displayName: 'Second', password: 'second-owner-password-123' } });
+  const secondProfile = (await body(second)).profile;
+  const outsider = await call(`/api/profiles/${secondProfile.id}/person`, { method: 'POST', cookie: firstCookie, data: { role: 'child', preferredName: 'Changed' } });
+  assert.equal(outsider.status, 404);
+  assert.equal((await body(await call('/api/person', { cookie: second.headers.get('set-cookie').split(';')[0] }))).person, null);
+  const met = await call('/api/household/meet', { method: 'POST', cookie: firstCookie, data: { displayName: 'Family Member' } });
+  assert.equal(met.status, 201);
+  const memberId = (await body(met)).profile.id;
+  const withinHousehold = await call(`/api/profiles/${memberId}/person`, { method: 'POST', cookie: firstCookie, data: { role: 'adult', preferredName: 'Family Member' } });
+  assert.equal(withinHousehold.status, 200);
+  const child = await call('/api/household/meet', { method: 'POST', cookie: firstCookie, data: { displayName: 'Child', birthday: '2018-08-01' } });
+  const childId = (await body(child)).profile.id;
+  assert.equal((await call(`/api/profiles/${childId}/person`, { method: 'POST', cookie: firstCookie, data: { role: 'adult', preferredName: 'Child' } })).status, 403);
+  assert.equal((await call(`/api/profiles/${childId}/person`, { method: 'POST', cookie: firstCookie, data: { role: 'child', preferredName: 'Child' } })).status, 200);
+});
+
+test('a saved minor birth date overrides stale adult and household owner flags', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'minor-owner', displayName: 'Minor', password: 'minor-owner-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const id = (await body(signup)).profile.id;
+  assert.equal((await call('/api/household/identity', { method: 'POST', cookie, data: { birthday: '2015-04-02' } })).status, 200);
+  table('profiles').get(id).role = 'adult';
+  assert.equal((await body(await call('/api/admin/access', { cookie }))).householdAdmin, false);
+  assert.equal((await call('/api/household/meet', { method: 'POST', cookie, data: { displayName: 'Another Person' } })).status, 403);
+  assert.equal((await call('/api/settings/verify-password', { method: 'POST', cookie, data: { password: 'minor-owner-password-123', deviceId: 'phone' } })).status, 403);
+});
+
+test('child without a saved birth date cannot self-assign an adult birth date', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'child-parent', displayName: 'Parent', password: 'child-parent-password-123' } });
+  const parentCookie = signup.headers.get('set-cookie').split(';')[0];
+  const met = await body(await call('/api/household/meet', { method: 'POST', cookie: parentCookie, data: { displayName: 'Child' } }));
+  assert.equal((await call(`/api/profiles/${met.profile.id}/person`, { method: 'POST', cookie: parentCookie, data: { role: 'child', preferredName: 'Child' } })).status, 200);
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'child-no-dob', password: 'child-password-123' } });
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('/api/household/identity', { method: 'POST', cookie: childCookie, data: { birthday: '1990-01-01' } })).status, 403);
+  assert.equal((await call('/api/household/identity', { method: 'POST', cookie: childCookie, data: { birthday: '2018-01-01' } })).status, 200);
+});
+
 test('recovery rotates the one-time code, password, and sessions', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'alice', displayName: 'Alice', password: 'original-long-password' } });
