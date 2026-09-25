@@ -5,7 +5,7 @@ import { recordPresenceSignal, currentPresence } from "./src/architecture/presen
 import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
-import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit, systemAccessAudit } from "./src/profiles/profiles.js";
+import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, profileById, accessAudit, systemAccessAudit } from "./src/profiles/profiles.js";
 import { addPersonToHousehold, developmentalStage, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
 import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
@@ -378,9 +378,8 @@ async function api(request, env, url) {
       return json({ text });
     } catch { return json({ error: "Voice transcription could not finish. Please try again or type your message." }, 503); }
   }
-  if (request.method === "POST" && url.pathname === "/api/voice/nicknames") return json({ profile: profileSummary(setWakeNicknames(profile, (await readJson(request)).nicknames)) });
-  if (request.method === "POST" && url.pathname === "/api/voice/wake") { const result = assessWakeContext({ ...(await readJson(request)), authorizedNicknames: profile.wakeNicknames || [] }); if (result.safeToRespond) transitionVoice(profile.id, "wake"); return json({ ...result, session: voiceState(profile.id) }); }
-  if (request.method === "POST" && url.pathname === "/api/voice/interpret") { const { transcript, confidence } = await readJson(request); if(typeof transcript!=="string"||transcript.length>500) return json({ error:"Short speech transcript required." },400); const result=assessWakeTranscript({ transcript, confidence, authorizedNicknames:profile.wakeNicknames||[] }); if(result.safeToRespond) transitionVoice(profile.id,"wake"); return json(result); }
+  if (request.method === "POST" && url.pathname === "/api/voice/wake") { const result = assessWakeContext(await readJson(request)); if (result.safeToRespond) transitionVoice(profile.id, "wake"); return json({ ...result, session: voiceState(profile.id) }); }
+  if (request.method === "POST" && url.pathname === "/api/voice/interpret") { const { transcript, confidence } = await readJson(request); if(typeof transcript!=="string"||transcript.length>500) return json({ error:"Short speech transcript required." },400); const result=assessWakeTranscript({ transcript, confidence }); if(result.safeToRespond) transitionVoice(profile.id,"wake"); return json(result); }
   if (request.method === "POST" && url.pathname === "/api/voice/state") return json({ session: transitionVoice(profile.id, (await readJson(request)).event) });
   if (request.method === "GET" && url.pathname === "/api/memories") return json({ memories: memory.inspect(url.searchParams.get("layer") || undefined), layers: memory.layers, retention: memory.retention, notice: memory.storageNotice });
   if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || !text.trim() || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
