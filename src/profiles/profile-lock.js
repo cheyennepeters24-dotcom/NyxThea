@@ -96,7 +96,6 @@ export async function addBiometricCredential(profile,{deviceId,credentialId,publ
   const auth=fromB64url(authenticatorData);if(auth.length<37||auth.length>16384)fail("Biometric registration response is invalid.",401);
   const expectedRp=await sha256(encoder.encode(challenge.rpId));if(!bytesEqual(auth.slice(0,32),expectedRp))fail("Biometric registration is for a different site.",401);
   if((auth[32]&0x01)===0)fail("Device user presence was not confirmed.",401);
-  if((auth[32]&0x01)===0)fail("Device user presence was not confirmed.",401);
   if((auth[32]&0x04)===0)fail("Device user verification was not completed.",401);
   const current=locks().get(profile.id)||{profileId:profile.id,biometricDevices:[]};
   const devices=Array.isArray(current.biometricDevices)?current.biometricDevices:[];
