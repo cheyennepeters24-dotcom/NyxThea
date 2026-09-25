@@ -18,3 +18,7 @@ storage = "sqlite"
 
 [ai]
 binding = "AI"
+
+[[routes]]
+pattern = "nyxthea.thecrimsonbluerose.com"
+custom_domain = true
