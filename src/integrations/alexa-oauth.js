@@ -64,8 +64,12 @@ function clientCredentials(request, form, env) {
     try { decoded = atob(basic.slice(6)); } catch { fail('Invalid client credentials.', 401); }
     const split = decoded.indexOf(':');
     if (split < 0) fail('Invalid client credentials.', 401);
-    clientId = decodeURIComponent(decoded.slice(0, split));
-    secret = decodeURIComponent(decoded.slice(split + 1));
+    try {
+      clientId = decodeURIComponent(decoded.slice(0, split));
+      secret = decodeURIComponent(decoded.slice(split + 1));
+    } catch {
+      fail('Invalid client credentials.', 401);
+    }
   }
   if (!env.ALEXA_OAUTH_CLIENT_ID || !env.ALEXA_OAUTH_CLIENT_SECRET || clientId !== env.ALEXA_OAUTH_CLIENT_ID || secret !== env.ALEXA_OAUTH_CLIENT_SECRET) fail('Invalid client credentials.', 401);
   return clientId;
