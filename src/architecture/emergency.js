@@ -91,7 +91,7 @@ export function saveEmergencyPolicy(profileId, policy) {
   if (!Array.isArray(policy.requiredSignalTypes) || policy.requiredSignalTypes.length < 2 || !policy.requiredSignalTypes.every((item) => typeof item === "string" && item.length <= 80) || !validFraction(policy.minimumConfidence ?? .8, 0, 1) || !Number.isInteger(Number(policy.minimumIndependentSources ?? 2)) || Number(policy.minimumIndependentSources ?? 2) < 2 || Number(policy.minimumIndependentSources ?? 2) > 10) fail("Emergency policy fields are invalid.");
   const existing = policy.id && policies().get(policy.id);
   if (existing && existing.profileId !== profileId) fail("Emergency policy ownership mismatch.", 403);
-  const saved = { id: policy.id || id("emergency_policy"), profileId, enabled: policy.enabled === true, requiredSignalTypes: [...new Set(policy.requiredSignalTypes)], minimumConfidence: Number(policy.minimumConfidence ?? .8), minimumIndependentSources: Number(policy.minimumIndependentSources ?? 2), createdAt: existing?.createdAt || now() };
+  const saved = { id: policy.id || id("emergency_policy"), profileId, enabled: policy.enabled === true, requiredSignalTypes: [...new Set(policy.requiredSignalTypes)], minimumConfidence: Number(policy.minimumConfidence ?? .8), minimumIndependentSources: Number(policy.minimumIndependentSources ?? 2), createdAt: existing?.createdAt || now(), updatedAt: now() };
   policies().set(saved.id, saved);
   return saved;
 }
