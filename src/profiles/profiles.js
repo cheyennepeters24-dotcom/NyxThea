@@ -11,6 +11,5 @@ export function mayAccessProfile({ requesterProfileId, targetProfileId, domain, 
 export function recordAccess(entry) { const record = { id: id("access"), at: now(), ...entry }; audit().set(record.id, record); return record; }
 export function accessAudit(profileId) { if(!profileId)return []; return list("access_audit",entry=>entry.profileId===profileId||entry.requesterProfileId===profileId||entry.targetProfileId===profileId).map(entry=>{const safe={...entry};if(safe.requesterProfileId!==profileId&&safe.targetProfileId!==profileId){delete safe.requesterProfileId;delete safe.targetProfileId;}return safe;}); }
 export function systemAccessAudit(profile) { requireSystemAdmin(profile); return list("access_audit"); }
-export function setWakeNicknames(profile, nicknames) { if (!Array.isArray(nicknames) || nicknames.length > 8 || !nicknames.every((name) => typeof name === "string" && name.trim().length >= 2 && name.trim().length <= 32)) throw Object.assign(new Error("Provide up to eight wake nicknames of 2–32 characters."), { status: 400 }); profile.wakeNicknames = [...new Set(nicknames.map((name) => name.trim().toLowerCase()))]; return profile; }
 export function profileById(profileId) { return profiles().get(profileId) || null; }
 export function profileSummary(profile) { const { token, ...safe } = profile; return safe; }
