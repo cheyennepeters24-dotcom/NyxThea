@@ -55,3 +55,25 @@ test('Alexa linking requires consent, registered redirect, client secret and one
   assert.equal(recovery.status, 200);
   assert.equal((await call('/api/alexa/chat', { method: 'POST', headers: { authorization: `Bearer ${access_token}`, 'content-type': 'application/json' }, body: JSON.stringify({ message: 'Hello again' }) })).status, 401);
 });
+
+test('password change revokes Alexa access and refresh tokens', async () => {
+  resetStateForTests();
+  const storage = new Storage();
+  const env = { ASSETS: { fetch: () => new Response('asset') }, ALEXA_OAUTH_CLIENT_ID: 'nyx-alexa', ALEXA_OAUTH_CLIENT_SECRET: 'test-secret', ALEXA_REDIRECT_URIS: 'https://pitangui.amazon.com/api/skill/link/example' };
+  const object = new NyxtheaState({ storage }, env);
+  env.NYXTHEA_STATE = { idFromName: () => 'primary', get: () => object };
+  const call = (path, options = {}) => worker.fetch(new Request(`https://nyxthea.test${path}`, { method: options.method || 'GET', headers: options.headers, body: options.body }), env);
+  const signup = await call('/api/auth/register', { method:'POST', headers:{origin:'https://nyxthea.test','content-type':'application/json'}, body:JSON.stringify({username:'alexa-password-change',password:'original-password-123',displayName:'Owner'}) });
+  const cookie=signup.headers.get('set-cookie').split(';')[0], redirect='https://pitangui.amazon.com/api/skill/link/example';
+  const params=new URLSearchParams({client_id:'nyx-alexa',redirect_uri:redirect,response_type:'code',state:'change-state',approve:'yes'});
+  const approval=await call('/api/alexa/authorize',{method:'POST',headers:{origin:'https://nyxthea.test',cookie},body:params});
+  const code=new URL(approval.headers.get('location')).searchParams.get('code');
+  const tokenCall=data=>call('/api/alexa/token',{method:'POST',headers:{authorization:`Basic ${btoa('nyx-alexa:test-secret')}`,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});
+  const linked=await tokenCall({grant_type:'authorization_code',code,redirect_uri:redirect});
+  const {access_token,refresh_token}=await linked.json();
+  assert.equal((await call('/api/alexa/chat',{method:'POST',headers:{authorization:`Bearer ${access_token}`,'content-type':'application/json'},body:JSON.stringify({message:'Before password change'})})).status,200);
+  const changed=await call('/api/auth/password',{method:'POST',headers:{origin:'https://nyxthea.test',cookie,'content-type':'application/json'},body:JSON.stringify({currentPassword:'original-password-123',newPassword:'new-password-456789'})});
+  assert.equal(changed.status,200);
+  assert.equal((await call('/api/alexa/chat',{method:'POST',headers:{authorization:`Bearer ${access_token}`,'content-type':'application/json'},body:JSON.stringify({message:'After password change'})})).status,401);
+  assert.equal((await tokenCall({grant_type:'refresh_token',refresh_token})).status,400);
+});
