@@ -37,6 +37,7 @@ test('Alexa linking requires consent, registered redirect, client secret and one
   const tokenRequest = { grant_type: 'authorization_code', code, redirect_uri: redirect };
   const tokenCall = (data, password = 'test-secret') => call('/api/alexa/token', { method: 'POST', headers: { authorization: `Basic ${btoa(`nyx-alexa:${password}`)}`, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(data) });
   assert.equal((await tokenCall(tokenRequest, 'wrong')).status, 401);
+  assert.equal((await tokenCall(tokenRequest, 'test%2Dsecret')).status, 401, 'Basic credentials must not be URI-decoded');
   const linked = await tokenCall(tokenRequest);
   assert.equal(linked.status, 200);
   const { access_token, refresh_token } = await linked.json();
