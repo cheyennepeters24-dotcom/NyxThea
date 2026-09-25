@@ -117,6 +117,7 @@ export async function completeEmailPasswordRecovery({username,code,newPassword})
   record.salt=salt;record.passwordHash=passwordHash;record.recoveryHash=await digest(nextCode);
   delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
   for(const [key,session] of sessions())if(session.profileId===record.profileId)sessions().delete(key);
+  for(const [key,alexaToken] of table('alexa_oauth_tokens'))if(alexaToken.profileId===record.profileId)table('alexa_oauth_tokens').delete(key);
   return {profile:profileSummary(profileById(record.profileId)),token:await makeSession(record.profileId),recoveryCode:nextCode};
 }
 export async function changeAccountPassword(profileId,{currentPassword,newPassword}={}) {
@@ -127,6 +128,7 @@ export async function changeAccountPassword(profileId,{currentPassword,newPasswo
   const salt=random();
   record.salt=salt;record.passwordHash=await derive(newPassword,salt);
   for(const [key,session] of sessions())if(session.profileId===profileId)sessions().delete(key);
+  for(const [key,alexaToken] of table('alexa_oauth_tokens'))if(alexaToken.profileId===profileId)table('alexa_oauth_tokens').delete(key);
   return {ok:true,token:await makeSession(profileId)};
 }
 
