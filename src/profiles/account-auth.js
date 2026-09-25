@@ -48,7 +48,8 @@ export async function claimProfileAccount({ inviteCode, username, password }) {
   if (accounts().has(name)) failure('That username is unavailable.', 409);
   const key = await digest(String(inviteCode || ''));
   const invite = claims().get(key);
-  if (!invite || invite.usedAt || invite.expiresAt <= Date.now()) failure('That household invite is invalid or expired.', 401);
+  const inviteExpiry=Number(invite?.expiresAt);
+  if (!invite || invite.usedAt || !Number.isFinite(inviteExpiry) || inviteExpiry <= Date.now()) failure('That household invite is invalid or expired.', 401);
   const profile = profileById(invite.profileId);
   if (!profile) failure('Profile is unavailable.', 404);
   if ([...accounts().values()].some(account => account.profileId === profile.id)) failure('That profile already has a sign-in.', 409);
