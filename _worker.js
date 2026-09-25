@@ -397,7 +397,7 @@ async function directHouseholdSpeaker(storage,requester,speakerProfileId){
   const rows=await storage.list({prefix:"nyxthea-state:household_memberships:"});
   const memberships=[...rows.values()].filter(x=>x?.active!==false&&typeof x?.householdId==="string"&&x.householdId&&typeof x?.profileId==="string"&&x.profileId);
   const own=memberships.filter(x=>x.profileId===requester.id),target=memberships.filter(x=>x.profileId===targetId);
-  if(own.length!==1||target.length!==1||own[0].householdId!==target[0].householdId)throw Object.assign(new Error("That speaker is not in this household."),{status:403});
+  if(!own.length||!target.length||!own.some(a=>target.some(b=>a.householdId===b.householdId)))throw Object.assign(new Error("That speaker is not in this household."),{status:403});
   const profile=await storage.get(durableKey("profiles",targetId));if(!profile)throw Object.assign(new Error("That household profile is unavailable."),{status:404});
   if(profile.role!=="child")throw Object.assign(new Error("An adult speaker must sign in to their own profile."),{status:403});
   return profile;
