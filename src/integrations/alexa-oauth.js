@@ -1,5 +1,5 @@
 import { table } from '../state/store.js';
-import { authLimit, cookieProfile, loginAccount } from '../profiles/account-auth.js';
+import { authFailureLimitCheck, authFailureLimitRecord, authFailureLimitReset, cookieProfile, loginAccount } from '../profiles/account-auth.js';
 import { profileById } from '../profiles/profiles.js';
 
 const enc = new TextEncoder();
@@ -44,9 +44,17 @@ export async function alexaAuthorize(request, env) {
   if (form.get('approve') !== 'yes') fail('Explicit consent is required.', 403);
   let profile = await cookieProfile(request);
   if (!profile) {
-    authLimit(request, 'alexa-login', 10, 15 * 60 * 1000);
-    try { profile = (await loginAccount({ username: form.get('username'), password: form.get('password') })).profile; }
-    catch { return linkingPage(params, null, 'Those sign-in details did not work. Please try again.'); }
+    authFailureLimitCheck(request, 'alexa-login', 10, 15 * 60 * 1000);
+    try {
+      profile = (await loginAccount({ username: form.get('username'), password: form.get('password') })).profile;
+      authFailureLimitReset(request, 'alexa-login');
+    } catch (error) {
+      if (error?.status === 401) {
+        authFailureLimitRecord(request, 'alexa-login', 15 * 60 * 1000);
+        return linkingPage(params, null, 'Those sign-in details did not work. Please try again.');
+      }
+      throw error;
+    }
   }
   const code = random();
   codes().set(await hash(code), { profileId: profile.id, clientId: params.clientId, uri: params.uri, challenge: params.challenge, expiresAt: Date.now() + expiry.code });
