@@ -32,12 +32,15 @@ test("Nyxthea can describe herself without model dependency", async () => {
   assert.equal(response.modelUsed, false);
 });
 
-test("wake word accepts natural requests instead of a fixed command grammar", () => {
-  for (const transcript of ["Nyx I was wondering if you could help with dinner", "Nixie this thing is acting weird", "NyxThea remind me later"]) {
-    const result=assessWakeTranscript({transcript,confidence:.8});
-    assert.equal(result.recognized,true);
-    assert.equal(result.safeToRespond,true);
-    assert.ok(result.request.length>0);
+test("Nyx is the only wake word and accepts natural requests", () => {
+  const result=assessWakeTranscript({transcript:"Nyx I was wondering if you could help with dinner",confidence:.8});
+  assert.equal(result.recognized,true);
+  assert.equal(result.safeToRespond,true);
+  assert.ok(result.request.length>0);
+  for (const transcript of ["Nixie this thing is acting weird", "NyxThea remind me later"]) {
+    const ignored=assessWakeTranscript({transcript,confidence:.99,authorizedNicknames:["Nixie","NyxThea"]});
+    assert.equal(ignored.recognized,false);
+    assert.equal(ignored.safeToRespond,false);
   }
 });
 
