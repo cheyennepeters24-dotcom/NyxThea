@@ -324,7 +324,7 @@ const NYXHandsFree={
    this.recordChunk();
  },
  stop(message="Voice activation off"){NYXSound.forceSession=false;this.persistentStream=false;for(const c of this.wakeAborts){try{c.abort()}catch{}}this.wakeAborts.clear();this.wakeInFlight=0;
-   const wasActive=this.active;this.active=false;this.paused=false;this.engagedUntil=0;this.generation++;
+   const wasActive=this.active;this.active=false;this.paused=false;this.turnBusy=false;this.speakerProfileId=null;this.speakerName=null;this.engagedUntil=0;this.generation++;
    clearTimeout(this.timer);this.timer=null;
    try{if(this.recorder&&this.recorder.state!=="inactive")this.recorder.stop()}catch{}
    this.recorder=null;try{this.recognition?.abort()}catch{}this.recognition=null;
