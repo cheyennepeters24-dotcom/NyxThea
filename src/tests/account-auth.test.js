@@ -223,6 +223,9 @@ test('same-device household voice can hand off to a child profile without exposi
   assert.equal(response.type,'education_guardrail');
   assert.match(response.answer,/can't do the assignment/i);
   assert.equal(response.speakerProfileId,met.profile.id);
+  const voiceTurns=[...table('conversation_turns').values()].filter(turn=>turn.text.includes('homework assignment'));
+  assert.ok(voiceTurns.length>=1);
+  assert.ok(voiceTurns.every(turn=>turn.profileId===met.profile.id));
 });
 
 test('child voice session cannot claim an adult household speaker', async () => {
