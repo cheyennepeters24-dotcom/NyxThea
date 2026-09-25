@@ -145,7 +145,7 @@ export async function cookieProfile(request) {
   const token = cookie(request); if (!token) return null;
   const key = await digest(token), session = sessions().get(key);
   if (!session) return null;
-  if (session.expiresAt <= Date.now()) { sessions().delete(key); return null; }
+  if (!Number.isFinite(Number(session.expiresAt)) || Number(session.expiresAt) <= Date.now()) { sessions().delete(key); return null; }
   return profileById(session.profileId);
 }
 export async function logoutAccount(request) { const token = cookie(request); if (token) sessions().delete(await digest(token)); }
