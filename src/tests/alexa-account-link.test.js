@@ -72,7 +72,11 @@ test('password change revokes Alexa access and refresh tokens', async () => {
   const linked=await tokenCall({grant_type:'authorization_code',code,redirect_uri:redirect});
   const {access_token,refresh_token}=await linked.json();
   assert.equal((await call('/api/alexa/chat',{method:'POST',headers:{authorization:`Bearer ${access_token}`,'content-type':'application/json'},body:JSON.stringify({message:'Before password change'})})).status,200);
-  const changed=await call('/api/auth/password',{method:'POST',headers:{origin:'https://nyxthea.test',cookie,'content-type':'application/json'},body:JSON.stringify({currentPassword:'original-password-123',newPassword:'new-password-456789'})});
+  const device='password-change-phone';
+  const verified=await call('/api/settings/verify-password',{method:'POST',headers:{origin:'https://nyxthea.test',cookie,'content-type':'application/json','x-nyxthea-device':device},body:JSON.stringify({password:'original-password-123',deviceId:device})});
+  assert.equal(verified.status,200);
+  const settingsAuth=(await verified.json()).authorization.token;
+  const changed=await call('/api/settings/change-password',{method:'POST',headers:{origin:'https://nyxthea.test',cookie,'content-type':'application/json','x-nyxthea-device':device,'x-nyxthea-settings-auth':settingsAuth},body:JSON.stringify({currentPassword:'original-password-123',newPassword:'new-password-456789',deviceId:device})});
   assert.equal(changed.status,200);
   assert.equal((await call('/api/alexa/chat',{method:'POST',headers:{authorization:`Bearer ${access_token}`,'content-type':'application/json'},body:JSON.stringify({message:'After password change'})})).status,401);
   assert.equal((await tokenCall({grant_type:'refresh_token',refresh_token})).status,400);
