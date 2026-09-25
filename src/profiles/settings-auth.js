@@ -6,7 +6,7 @@ export function issueSettingsAuthorization(profileId,deviceId,ttlMs=5*60*1000){
   const token=`${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g,"")}`;
   const ttl=Number(ttlMs);if(!Number.isFinite(ttl)||ttl<=0||ttl>15*60*1000)fail("Settings authorization lifetime is invalid.",400);
   const expiresAt=Date.now()+ttl;
-  for(const [key,record] of auths())if(record.expiresAt<=Date.now()||(record.profileId===profileId&&record.deviceId===device))auths().delete(key);
+  for(const [key,record] of auths()){const expiry=Number(record?.expiresAt);if(!Number.isFinite(expiry)||expiry<=Date.now()||(record.profileId===profileId&&record.deviceId===device))auths().delete(key);}
   auths().set(token,{profileId,deviceId:device,createdAt:now(),expiresAt});
   return {token,expiresAt};
 }
