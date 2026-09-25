@@ -49,18 +49,24 @@ export function developmentalStage(birthday){
   if(age<18)return "older_teen";
   return "adult";
 }
+function normalizeMembership(profileId){
+  const active=[...memberships()].filter(([,m])=>m.profileId===profileId&&m.active!==false),valid=active.filter(([,m])=>households().has(m.householdId));
+  const ranked=[...valid].sort(([aKey,a],[bKey,b])=>{const aHouse=households().get(a.householdId),bHouse=households().get(b.householdId);const aScore=(aKey===`${a.householdId}:${profileId}`?2:0)+(aHouse?.createdBy===profileId?1:0),bScore=(bKey===`${b.householdId}:${profileId}`?2:0)+(bHouse?.createdBy===profileId?1:0);return bScore-aScore||aKey.localeCompare(bKey);}),chosen=ranked[0]||null;
+  for(const [key] of active)if(!chosen||key!==chosen[0])memberships().delete(key);
+  if(chosen){const memberIds=new Set(list("household_memberships",m=>m.householdId===chosen[1].householdId&&m.active!==false).map(m=>m.profileId));for(const [key,relationship] of relationships())if((relationship.fromProfileId===profileId||relationship.toProfileId===profileId)&&(!memberIds.has(relationship.fromProfileId)||!memberIds.has(relationship.toProfileId)))relationships().delete(key);return chosen[1];}
+  return null;
+}
 export function ensureHousehold(profileId,{name}={}){
-  let membership=list("household_memberships",x=>x.profileId===profileId&&x.active!==false)[0];
-  if(membership)return households().get(membership.householdId)||null;
+  const membership=normalizeMembership(profileId);
+  if(membership)return households().get(membership.householdId);
   const household={id:id("household"),name:clean(name,80)||"My household",mode:"personal",createdBy:profileId,createdAt:now(),updatedAt:now()};
   households().set(household.id,household);
   memberships().set(`${household.id}:${profileId}`,{householdId:household.id,profileId,role:"owner",active:true,joinedAt:now()});
   return household;
 }
 export function householdForProfile(profileId){
-  const membership=list("household_memberships",x=>x.profileId===profileId&&x.active!==false)[0];
-  if(!membership)return null;
-  return households().get(membership.householdId)||null;
+  const membership=normalizeMembership(profileId);
+  return membership?households().get(membership.householdId)||null:null;
 }
 export function profileIdentity(profileId){
   const value=identities().get(profileId)||null;
@@ -72,7 +78,11 @@ export function saveProfileIdentity(profile,{preferredName,pronunciation,birthda
   const parsedBirthday=birthday!==undefined?parseBirthday(birthday):previous.birthday||null;
   let celebration=birthdayMonthDay!==undefined?clean(birthdayMonthDay,5):previous.birthdayMonthDay||null;
   if(parsedBirthday)celebration=parsedBirthday.slice(5);
-  if(celebration&&!/^\d{2}-\d{2}$/.test(celebration))fail("Birthday month/day must use MM-DD.");
+  if(celebration){
+    const m=celebration.match(/^(\d{2})-(\d{2})$/);if(!m)fail("Birthday month/day must use MM-DD.");
+    const month=Number(m[1]),day=Number(m[2]),probe=new Date(Date.UTC(2000,month-1,day));
+    if(probe.getUTCMonth()!==month-1||probe.getUTCDate()!==day)fail("Birthday month/day is not a valid date.");
+  }
   const record={
     profileId:profile.id,
     preferredName:preferredName!==undefined?clean(preferredName,80):(previous.preferredName||profile.displayName),
@@ -93,6 +103,7 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
   for(const [key,membership] of memberships()){
     if(membership.profileId===profile.id&&membership.householdId!==household.id&&membership.active!==false){
       memberships().delete(key);
+      for(const [relationshipKey,relationship] of relationships())if(relationship.fromProfileId===profile.id||relationship.toProfileId===profile.id)relationships().delete(relationshipKey);
       const remaining=list("household_memberships",x=>x.householdId===membership.householdId&&x.active!==false);
       if(!remaining.length)households().delete(membership.householdId);
     }
@@ -104,6 +115,8 @@ export function addPersonToHousehold(requester,profile,{relationshipToRequester=
 }
 export function setRelationship(fromProfileId,toProfileId,type,{label=null}={}){
   if(!fromProfileId||!toProfileId||fromProfileId===toProfileId)fail("Two different profiles are required.");
+  const fromMembership=normalizeMembership(fromProfileId),toMembership=normalizeMembership(toProfileId);
+  if(!fromMembership||!toMembership||fromMembership.householdId!==toMembership.householdId)fail("Relationships can only be set between confirmed members of the same household.",403);
   const normalized=clean(type,48).toLowerCase().replace(/\s+/g,"_");
   if(!normalized)fail("Relationship type is required.");
   const createdAt=now();

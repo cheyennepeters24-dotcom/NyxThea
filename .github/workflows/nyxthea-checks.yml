@@ -6,9 +6,14 @@ on:
     branches:
       - main
       - "nyxthea/**"
+      - "fix/**"
 
 permissions:
   contents: read
+
+concurrency:
+  group: nyxthea-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -22,7 +27,73 @@ jobs:
           node-version: "22"
       - name: Run tests
         run: npm test
+
+  worker-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Check Worker syntax
         run: npm run check
+
+  source-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check source syntax
+        run: npm run check:source
+
+  ui-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Check interface syntax
         run: npm run check:ui
+
+  report:
+    if: always() && vars.NYXTHEA_CI_INGEST_URL != ''
+    needs: [test, worker-syntax, source-syntax, ui-syntax]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report build health to NyxThea System Admin
+        env:
+          INGEST_URL: ${{ vars.NYXTHEA_CI_INGEST_URL }}
+          INGEST_TOKEN: ${{ secrets.NYXTHEA_CI_INGEST_TOKEN }}
+          TEST_RESULT: ${{ needs.test.result }}
+          WORKER_RESULT: ${{ needs.worker-syntax.result }}
+          SOURCE_RESULT: ${{ needs.source-syntax.result }}
+          UI_RESULT: ${{ needs.ui-syntax.result }}
+        run: |
+          if [ -z "$INGEST_TOKEN" ]; then
+            echo "CI ingestion token is not configured; skipping report."
+            exit 0
+          fi
+          payload=$(jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg sha "$GITHUB_SHA" \
+            --arg conclusion "$([[ "$TEST_RESULT" == success && "$WORKER_RESULT" == success && "$SOURCE_RESULT" == success && "$UI_RESULT" == success ]] && echo success || echo failure)" \
+            --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg test "$TEST_RESULT" --arg worker "$WORKER_RESULT" --arg source "$SOURCE_RESULT" --arg ui "$UI_RESULT" \
+            '{runId:$runId,repository:$repository,branch:$branch,sha:$sha,status:"completed",conclusion:$conclusion,url:$url,jobs:[{name:"tests",result:$test},{name:"worker-syntax",result:$worker},{name:"source-syntax",result:$source},{name:"ui-syntax",result:$ui}]}')
+          if ! curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $INGEST_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$payload" "$INGEST_URL/api/internal/ci-report"; then
+            echo "::warning::NyxThea System Admin CI reporting failed; core CI results are unchanged."
+          fi

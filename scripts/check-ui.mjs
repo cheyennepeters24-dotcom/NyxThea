@@ -23,4 +23,5 @@ for(const [index,source] of scripts.entries()){
   try{new vm.Script(source,{filename:`public/index.html:inline-${index+1}.js`});}
   catch(error){console.error(error.stack||error);process.exit(1);}
 }
+if(!html.includes("d.buildHealth||[]")||!html.includes("similar runs")||!html.includes("Open CI run"))throw new Error("System Admin must render grouped CI build health.");
 console.log(`Checked ${scripts.length} inline Nyxthea script block(s).`);

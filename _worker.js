@@ -5,7 +5,7 @@ import { recordPresenceSignal, currentPresence } from "./src/architecture/presen
 import { basicEmergencyIncidents, evaluateSavedEmergency, markBasicEmergencySafe, recordBasicEmergencyLocation, recordEmergencyEvidence, saveEmergencyPolicy, startBasicEmergency } from "./src/architecture/emergency.js";
 import { assessWakeContext, assessWakeTranscript, transitionVoice, voiceState, voicePlan } from "./src/architecture/voice.js";
 import { recordObservation, proposeLearningChange, testProposal, learningStatus } from "./src/architecture/learning.js";
-import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit } from "./src/profiles/profiles.js";
+import { bootstrapOwner, createProfile, authenticate, grantAccess, revokeGrant, profileSummary, recordAccess, setWakeNicknames, profileById, accessAudit, systemAccessAudit } from "./src/profiles/profiles.js";
 import { addPersonToHousehold, devicesFor, ensureHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship, trustedDevice } from "./src/profiles/household-identity.js";
 import { addBiometricCredential, beginBiometric, deviceLockState, disableProfileLock, markDeviceLocked, markDeviceUnlocked, profileLock, removeBiometricCredential, setProfilePin, verifyBiometricCredential, verifyProfilePin } from "./src/profiles/profile-lock.js";
 import { requireProfileAccess } from "./src/privacy/authorization.js";
@@ -24,7 +24,7 @@ import { createGoal, updateGoal, startExperiment, measureExperiment, rememberDec
 import { prepareMusicCommand } from "./src/intelligence/music.js";
 import { permissionDecision } from "./src/intelligence/permissions.js";
 import { assessCrash, vehicleMode } from "./src/intelligence/vehicle.js";
-import { selfMonitor, explainFailure } from "./src/intelligence/monitoring.js";
+import { selfMonitor, explainFailure, recordCiBuildRun, ciBuildRuns } from "./src/intelligence/monitoring.js";
 import { hydrateDurableState, persistDurableState } from "./src/state/durable-store.js";
 import { table } from "./src/state/store.js";
 import { registerAccount, loginAccount, cookieProfile, logoutAccount, sessionCookie, clearSessionCookie, sameOrigin, authLimit, recoverAccount, createProfileClaimInvite, claimProfileAccount, verifyAccountPassword, accountRecoveryStatus, startRecoveryEmailVerification, confirmRecoveryEmail, startEmailPasswordRecovery, completeEmailPasswordRecovery, changeAccountPassword, cancelRecoveryEmailVerification, cancelEmailPasswordRecovery } from "./src/profiles/account-auth.js";
@@ -37,10 +37,13 @@ import { identityPolicy, spokenPrivacy } from "./src/privacy/identity-policy.js"
 import { alexaAuthorize, alexaToken, alexaProfile } from "./src/integrations/alexa-oauth.js";
 import { mailConfigured, sendRecoveryMail } from "./src/integrations/recovery-mail.js";
 import { issueSettingsAuthorization, requireSettingsAuthorization } from "./src/profiles/settings-auth.js";
+import { ensureInitialSystemAdmin, isSystemAdmin, requireSystemAdmin, recordSystemAdminAction, systemAdminAudit } from "./src/security/system-admin.js";
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), { status, headers: securityHeaders({ "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra }) });
+async function secureTokenEqual(a,b){const supplied=String(a||""),expected=String(b||"");if(!expected)return false;const encoder=new TextEncoder(),[leftHash,rightHash]=await Promise.all([crypto.subtle.digest("SHA-256",encoder.encode(supplied)),crypto.subtle.digest("SHA-256",encoder.encode(expected))]),left=new Uint8Array(leftHash),right=new Uint8Array(rightHash);let diff=0;for(let i=0;i<left.length;i++)diff|=left[i]^right[i];return diff===0&&supplied.length>0}
 async function identity(request, env) { const profile = await cookieProfile(request); if (profile) return profile; if (env.NYXTHEA_STATE) throw Object.assign(new Error("Authentication is required."), { status: 401 }); return authenticate({ profileId: request.headers.get("x-nyxthea-profile"), token: request.headers.get("x-nyxthea-profile-token") }); }
 async function own(request, env, action) {
   const profile = await identity(request, env);
+  ensureInitialSystemAdmin(profile, env.NYXTHEA_INITIAL_SYSTEM_ADMIN_PROFILE_ID);
   if (request.method !== "GET" && request.headers.get("cookie")?.includes("nyxthea_session=") && !sameOrigin(request)) throw Object.assign(new Error("Same-origin request required."), { status: 403 });
   const path=new URL(request.url).pathname;
   const lockExempt=path.startsWith("/api/profile-lock")||path==="/api/devices/register";
@@ -64,6 +67,13 @@ function requireAdultProfile(profile) {
 }
 function domainForPath(path) { return path.slice(5).replace("pets", "pet").replace("vehicles", "vehicle").replace("health", "wellness"); }
 async function api(request, env, url) {
+  if(request.method==="POST"&&url.pathname==="/api/internal/ci-report"){
+    if(!env.NYXTHEA_CI_INGEST_TOKEN)return json({error:"CI ingestion is not configured."},503);
+    const authorization=request.headers.get("authorization")||"",token=authorization.startsWith("Bearer ")?authorization.slice(7):"";
+    if(!await secureTokenEqual(token,env.NYXTHEA_CI_INGEST_TOKEN))return json({error:"Unauthorized."},401);
+    const input=await readJson(request);
+    return json({build:recordCiBuildRun(input)},201);
+  }
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: securityHeaders({ allow: "GET, POST, DELETE, OPTIONS" }) });
   if (url.pathname === "/api/alexa/authorize") return alexaAuthorize(request, env);
   if (url.pathname === "/api/alexa/token") return json(await alexaToken(request, env));
@@ -92,7 +102,7 @@ async function api(request, env, url) {
     if(!mailConfigured(env))return json({sent:false,error:"Recovery email delivery is not configured yet."},503);
     const input=await readJson(request), result=await startEmailPasswordRecovery(input.username);
     if(result.sent){try{await sendRecoveryMail(env,{to:result.email,kind:"recover",code:result.code})}catch(error){cancelEmailPasswordRecovery(input.username);throw error}}
-    return json({sent:Boolean(result.sent)&&mailConfigured(env)});
+    return json({sent:true});
   }
   if (request.method === "POST" && url.pathname === "/api/auth/recover-email/complete") {
     authLimit(request, "recover-email-complete", 10, 900000);
@@ -118,6 +128,9 @@ async function api(request, env, url) {
   if (request.method === "POST" && /^\/api\/agency\/jobs\/[^/]+\/stop$/.test(url.pathname)) return json({ job: stopJob(profile.id, url.pathname.split("/")[4]) });
   if (request.method === "POST" && url.pathname === "/api/privacy/identity-policy") return json(identityPolicy({ ...(await readJson(request)), role: profile.role || (isHouseholdAdmin(profile) ? "owner" : "user") }));
   if (request.method === "POST" && url.pathname === "/api/privacy/spoken") return json(spokenPrivacy(await readJson(request)));
+  if (request.method === "GET" && url.pathname === "/api/admin/access") return json({ householdAdmin: isHouseholdAdmin(profile), systemAdmin: isSystemAdmin(profile) });
+  if (request.method === "GET" && url.pathname === "/api/admin/household") { requireAdmin(profile); return json({ household: householdSummary(profile.id), devices: devicesFor(profile.id), integrations: integrationStatus(profile.id) }); }
+  if (request.method === "GET" && url.pathname === "/api/admin/system") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.admin.opened"); return json({ monitoring: selfMonitor(profile.id, { aiConnected: Boolean(env.AI), systemWide: true }), systemAudit: systemAdminAudit(profile), accessAudit: systemAccessAudit(profile), integrationAudit: integrationAudit(), buildHealth: ciBuildRuns() }); }
   if (request.method === "GET" && url.pathname === "/api/audit") return json({ audit: accessAudit(profile.id) });
   if (request.method === "POST" && url.pathname === "/api/settings/verify-password") {
     authLimit(request,`settings-password:${profile.id}`,10,900000); requireAdultProfile(profile); const input=await readJson(request); await verifyAccountPassword(profile.id,input.password);
@@ -157,6 +170,7 @@ async function api(request, env, url) {
     return json({ identity: identityRecord, household: householdSummary(profile.id), settings });
   }
   if (request.method === "POST" && url.pathname === "/api/household/meet") {
+    requireAdmin(profile);
     const input = await readJson(request);
     if (!input.displayName?.trim()) return json({ error: "Tell me the new person's name first." }, 400);
     const created = createProfile({ displayName: input.displayName });
@@ -175,6 +189,7 @@ async function api(request, env, url) {
     return json({identity:identityRecord,household:householdSummary(profile.id)});
   }
   if (request.method === "POST" && url.pathname === "/api/household/relationship") {
+    requireAdmin(profile);
     const input = await readJson(request);
     const household = householdSummary(profile.id);
     if (!household.members.some(member => member.profileId === input.toProfileId)) return json({ error: "That person is not in this household." }, 404);
@@ -203,7 +218,7 @@ async function api(request, env, url) {
     return json(beginBiometric(profile,{...input,origin,rpId}));
   }
     if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric") {
-    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
+    const input=await readJson(request); requireSettingsAuthorization(profile.id,input.deviceId,request.headers.get("x-nyxthea-settings-auth")); const lock=await addBiometricCredential(profile,input); return json({ lock, unlock:markDeviceUnlocked(profile,{deviceId:input.deviceId}) });
   }
   if (request.method === "POST" && url.pathname === "/api/profile-lock/biometric/verify") {
     const input=await readJson(request); const result=await verifyBiometricCredential(profile,input);
@@ -222,7 +237,7 @@ async function api(request, env, url) {
     const input = await readJson(request); requireSettingsAuthorization(profile.id,request.headers.get("x-nyxthea-device")||"",request.headers.get("x-nyxthea-settings-auth"));
     return json({ device: trustedDevice(profile.id, decodeURIComponent(url.pathname.split("/")[3]), input.trusted !== false) });
   }
-  if (request.method === "POST" && url.pathname === "/api/profiles") { requireAdmin(profile); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is isolate-local and shown once." }, 201); }
+  if (request.method === "POST" && url.pathname === "/api/profiles") { requireAdmin(profile); const created = createProfile(await readJson(request)); return json({ profile: profileSummary(created), credential: { profileId: created.id, token: created.token }, notice: "Credential is shown once. Persistent deployments store the profile in durable state." }, 201); }
   if (request.method === "GET" && url.pathname === "/api/status") { const integrations = integrationStatus(profile.id); return json({ name: "Nyxthea", memoryNotice: memory.storageNotice, privacy: privacySummary(), distributed: describeDistributedSystem(), topology: topology(profile.id), voice: voiceState(profile.id), actionPolicy: "No external action is available without an active authorized integration.", profile: profileSummary(profile), authentication: env.NYXTHEA_STATE ? "password account and server session" : "temporary local-development credential" }); }
   if (request.method === "GET" && url.pathname === "/api/capabilities") return json({ capabilities: getCapabilities({ aiConnected: Boolean(env.AI), integrations: integrationStatus(profile.id) }) });
   if (request.method === "POST" && url.pathname === "/api/world/facts") return json({ fact: captureWorldFact(profile.id, await readJson(request)) }, 201);
@@ -236,7 +251,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/intelligence/importance") return json(assessImportance(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/intelligence/tradeoffs") return json({ options: compareTradeoffs((await readJson(request)).options) });
   if (request.method === "POST" && url.pathname === "/api/permissions/check") { const input = await readJson(request),household=householdSummary(profile.id),householdAdmin=household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner"); return json(permissionDecision(profile, input.action, {...input,householdAdmin})); }
-  if (request.method === "GET" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/records")) { const targetProfileId = url.pathname.split("/")[3]; const domain = url.searchParams.get("domain"); const protectedDomain = { pet: "pet_care", vehicle: "vehicle_information", wellness: "health_wellness" }[domain]; requireProfileAccess({ requester: profile, targetProfileId, domain: protectedDomain }); return json({ records: listRecords(targetProfileId, domain) }); }
+  if (request.method === "GET" && url.pathname.startsWith("/api/profiles/") && url.pathname.endsWith("/records")) { const targetProfileId = url.pathname.split("/")[3]; const domain = url.searchParams.get("domain"); const protectedDomain = { pet: "pet_care", vehicle: "vehicle_information", wellness: "health_wellness" }[domain]; if(!protectedDomain)return json({error:"Protected record domain must be pet, vehicle, or wellness."},400); requireProfileAccess({ requester: profile, targetProfileId, domain: protectedDomain }); return json({ records: listRecords(targetProfileId, domain) }); }
   if (request.method === "POST" && url.pathname === "/api/profiles/grants") { const input = await readJson(request); if (input.from !== profile.id) return json({ error: "A profile may grant only its own protected data." }, 403); return json({ grant: grantAccess(input) }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/profiles/grants/")) { const household=householdSummary(profile.id); return json({ revoked: revokeGrant(profile, url.pathname.split("/").at(-1), { householdAdmin:isHouseholdAdmin(profile), householdProfileIds:(household.members||[]).map(member=>member.profileId) }) }); }
   if (request.method === "GET" && url.pathname === "/api/endpoints") return json({ topology: topology(profile.id) });
@@ -255,7 +270,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/integrations") { requireAdmin(profile); const { kind, permissions } = await readJson(request); return json({ integration: requestConnection(profile.id, kind, permissions) }, 201); }
   if (request.method === "POST" && url.pathname.startsWith("/api/integrations/authorize/")) return json({ integration: authorizeConnection(profile.id, url.pathname.split("/").at(-1), (await readJson(request)).permissions) });
   if (request.method === "DELETE" && url.pathname.startsWith("/api/integrations/")) return json({ revoked: revokeConnection(profile.id, url.pathname.split("/").at(-1)) });
-  if (request.method === "GET" && url.pathname === "/api/integrations/audit") return json({ audit: integrationAudit(profile.id) });
+  if (request.method === "GET" && url.pathname === "/api/integrations/audit") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "integration.audit.viewed"); return json({ audit: integrationAudit() }); }
   if (request.method === "POST" && url.pathname === "/api/consents") return json({ consent: grantConsent(profile.id, await readJson(request)) }, 201);
   if (request.method === "DELETE" && url.pathname.startsWith("/api/consents/")) return json({ revoked: revokeConsent(profile.id, url.pathname.split("/").at(-1)) });
   if (request.method === "POST" && /^\/api\/(pets|vehicles|wellness|health)$/.test(url.pathname)) { const domain = domainForPath(url.pathname); const input = await readJson(request); if (domain === "wellness") requireProfileAccess({ requester: profile, targetProfileId: profile.id, domain: "health_wellness", consentId: input.consentId, consentDomain: "wellness" }); return json({ record: createRecord(profile.id, domain, input.type, input.data) }, 201); }
@@ -288,7 +303,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && /^\/api\/live-guide\/[^/]+\/analyze$/.test(url.pathname)) { enforceRateLimit(`${profile.id}:live-guide-analysis`, { limit: 12, windowMs: 60000 }); const sessionId = url.pathname.split("/")[3]; return json(await analyzeLiveGuide(profile.id, sessionId, await readJson(request, MAX_MEDIA_JSON_BYTES), { ai: env.AI })); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/live-guide/")) return json({ session: stopLiveGuide(profile.id, url.pathname.split("/")[3]) });
   if (request.method === "POST" && url.pathname === "/api/emergency/silent") { const incident = startBasicEmergency(profile.id, await readJson(request)); return json({ ...incident, incident, action: "proposal_only", audio: "remain_quiet", next: "use_native_emergency_call_or_one_time_location_if_needed" }, 202); }
-  if (request.method === "GET" && url.pathname === "/api/monitoring") return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) }));
+  if (request.method === "GET" && url.pathname === "/api/monitoring") { requireSystemAdmin(profile); recordSystemAdminAction(profile, "system.monitoring.viewed"); return json(selfMonitor(profile.id, { aiConnected: Boolean(env.AI) })); }
   if (request.method === "POST" && url.pathname === "/api/recovery/explain") return json(explainFailure(await readJson(request)));
   if (request.method === "GET" && url.pathname === "/api/voice/plan") return json(voicePlan());
   if (request.method === "POST" && url.pathname === "/api/voice/chat") {
@@ -302,7 +317,7 @@ async function api(request, env, url) {
       const context=buildContext({conversation:recentTurns(profile.id).slice(-4)});
       const response=await Promise.race([
         converseFast(env.AI,prompt,context),
-        new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),4500))
+        new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),8000))
       ]);
       if(response.text)recordTurn(profile.id,"assistant",response.text);
       return json({answer:response.text,modelUsed:response.modelUsed,fast:true});
@@ -320,8 +335,11 @@ async function api(request, env, url) {
       const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
       const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
       const audio=await Promise.race([env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
-      const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
-      return new Response(audio.body,{status:audio.status,headers});
+      if(!audio?.ok||!audio.body)throw new Error("Natural voice provider returned an invalid response.");
+      const providerType=String(audio.headers?.get("content-type")||"").toLowerCase();
+      if(providerType&&!providerType.startsWith("audio/"))throw new Error("Natural voice provider returned non-audio content.");
+      const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",providerType||"audio/mpeg");
+      return new Response(audio.body,{status:200,headers});
     }catch{return json({ error:"Natural voice could not finish. Falling back to the device voice." },503);}
   }
   if (request.method === "POST" && url.pathname === "/api/voice/transcribe") {
@@ -342,7 +360,7 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/voice/interpret") { const { transcript, confidence } = await readJson(request); if(typeof transcript!=="string"||transcript.length>500) return json({ error:"Short speech transcript required." },400); const result=assessWakeTranscript({ transcript, confidence, authorizedNicknames:profile.wakeNicknames||[] }); if(result.safeToRespond) transitionVoice(profile.id,"wake"); return json(result); }
   if (request.method === "POST" && url.pathname === "/api/voice/state") return json({ session: transitionVoice(profile.id, (await readJson(request)).event) });
   if (request.method === "GET" && url.pathname === "/api/memories") return json({ memories: memory.inspect(url.searchParams.get("layer") || undefined), layers: memory.layers, retention: memory.retention, notice: memory.storageNotice });
-  if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
+  if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || !text.trim() || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/memories/")) return json({ deleted: memory.forget(url.pathname.split("/").at(-1)) });
   if (request.method === "DELETE" && url.pathname === "/api/memories") return json({ deleted: memory.clear(url.searchParams.get("layer") || undefined) });
   if (request.method === "POST" && url.pathname === "/api/conversation/state") return json({ state: setConversationState(profile.id, (await readJson(request)).mode) });
@@ -362,13 +380,14 @@ async function directVoiceProfile(storage,request){
   const token=sessionCookieValue(request);if(!token)throw Object.assign(new Error("Authentication is required."),{status:401});
   const hash=await digestHex(token);
   const session=await storage.get(durableKey("auth_sessions",hash));
-  if(!session||session.expiresAt<=Date.now())throw Object.assign(new Error("Authentication is required."),{status:401});
+  if(!session||!Number.isFinite(Number(session.expiresAt))||Number(session.expiresAt)<=Date.now())throw Object.assign(new Error("Authentication is required."),{status:401});
   const profile=await storage.get(durableKey("profiles",session.profileId));
   if(!profile)throw Object.assign(new Error("Authentication is required."),{status:401});
   const lock=await storage.get(durableKey("profile_locks",profile.id));
   if(lock?.enabled){
-    const deviceId=request.headers.get("x-nyxthea-device")||"";
-    if(!deviceId||!(lock.unlockedDevices||[]).includes(deviceId))throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
+    const deviceId=String(request.headers.get("x-nyxthea-device")||"").trim();
+    const unlocked=Array.isArray(lock.unlockedDevices)?lock.unlockedDevices.filter(id=>typeof id==="string"&&id.length<=128):[];
+    if(!deviceId||deviceId.length>128||!unlocked.includes(deviceId))throw Object.assign(new Error("This adult profile is locked on this device."),{status:423});
   }
   return profile;
 }
@@ -376,9 +395,9 @@ async function directHouseholdSpeaker(storage,requester,speakerProfileId){
   const targetId=String(speakerProfileId||"").trim();if(!targetId||targetId===requester.id)return requester;
   if(requester.role==="child")throw Object.assign(new Error("A child session cannot switch to another household speaker."),{status:403});
   const rows=await storage.list({prefix:"nyxthea-state:household_memberships:"});
-  const memberships=[...rows.values()].filter(x=>x?.active!==false);
-  const own=memberships.find(x=>x.profileId===requester.id),target=memberships.find(x=>x.profileId===targetId);
-  if(!own||!target||own.householdId!==target.householdId)throw Object.assign(new Error("That speaker is not in this household."),{status:403});
+  const memberships=[...rows.values()].filter(x=>x?.active!==false&&typeof x?.householdId==="string"&&x.householdId&&typeof x?.profileId==="string"&&x.profileId);
+  const own=memberships.filter(x=>x.profileId===requester.id),target=memberships.filter(x=>x.profileId===targetId);
+  if(own.length!==1||target.length!==1||own[0].householdId!==target[0].householdId)throw Object.assign(new Error("That speaker is not in this household."),{status:403});
   const profile=await storage.get(durableKey("profiles",targetId));if(!profile)throw Object.assign(new Error("That household profile is unavailable."),{status:404});
   if(profile.role!=="child")throw Object.assign(new Error("An adult speaker must sign in to their own profile."),{status:403});
   return profile;
@@ -416,7 +435,7 @@ export class NyxtheaState {
         const education=educationGuidance(speaker,prompt); if(!education.allowed)return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});
         if(!this.env.AI)return json({answer:"I'm having trouble reaching my conversation model right now.",degraded:true,fast:true,speakerProfileId:speaker.id},503);
         try{
-          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),4000))]);
+          const response=await Promise.race([converseFast(this.env.AI,prompt,{conversation:[]}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Voice response timed out.")),8000))]);
           return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
         }catch{return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true})}
       }
@@ -429,8 +448,11 @@ export class NyxtheaState {
           const allowed=new Set(["luna","athena","asteria","hera","stella","aurora","cora","delia","electra","helena","iris","juno","ophelia","phoebe","thalia","theia","vesta"]);
           const selected=allowed.has(String(speaker||"").toLowerCase())?String(speaker).toLowerCase():"luna";
           const audio=await Promise.race([this.env.AI.run("@cf/deepgram/aura-2-en",{text:spoken,speaker:selected,encoding:"mp3"},{returnRawResponse:true}),new Promise((_,reject)=>setTimeout(()=>reject(new Error("Natural voice timed out.")),6000))]);
-          const headers=new Headers(audio.headers);headers.set("cache-control","no-store");headers.set("content-type",headers.get("content-type")||"audio/mpeg");
-          return new Response(audio.body,{status:audio.status,headers});
+          if(!audio?.ok||!audio.body)return json({error:"Natural voice provider did not return audio."},503);
+          const headers=new Headers(audio.headers),contentType=String(headers.get("content-type")||"").toLowerCase();
+          if(!contentType.startsWith("audio/"))return json({error:"Natural voice provider returned an invalid response."},503);
+          headers.set("cache-control","no-store");
+          return new Response(audio.body,{status:200,headers});
         }catch{return json({error:"Natural voice could not finish."},503)}
       }
       return json({error:"Not found."},404);

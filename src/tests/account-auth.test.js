@@ -116,6 +116,26 @@ test('a household invite claims the existing profile instead of creating a dupli
 });
 
 
+test('protected cross-profile records reject unknown domains', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'domain-owner', displayName: 'Domain Owner', password: 'domain-owner-password-123' } });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const session = await body(await call('/api/auth/session', { cookie }));
+  assert.equal((await call(`/api/profiles/${session.profile.id}/records?domain=unknown`, { cookie })).status, 400);
+});
+
+test('child household members cannot add people or rewrite relationships', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const ownerSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'family-admin', displayName: 'Parent', password: 'family-admin-password-123' } });
+  const ownerCookie = ownerSignup.headers.get('set-cookie').split(';')[0];
+  await call('/api/household/identity', { method: 'POST', cookie: ownerCookie, data: { preferredName: 'Parent', birthday: '1990-01-01' } });
+  const met = await body(await call('/api/household/meet', { method: 'POST', cookie: ownerCookie, data: { displayName: 'Kid', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
+  const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'family-child', password: 'family-child-password-123' } });
+  const childCookie = claimed.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('/api/household/meet', { method: 'POST', cookie: childCookie, data: { displayName: 'Unauthorized Person' } })).status, 403);
+  assert.equal((await call('/api/household/relationship', { method: 'POST', cookie: childCookie, data: { toProfileId: ownerSignup.profile?.id || met.household.createdBy, type: 'friend' } })).status, 403);
+});
+
 test('adult Settings require fresh verification and child profiles are denied', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const adultSignup = await call('/api/auth/register', { method: 'POST', data: { username: 'settings-adult', displayName: 'Adult', password: 'settings-adult-password-123' } });
@@ -125,12 +145,16 @@ test('adult Settings require fresh verification and child profiles are denied', 
   assert.equal(wrong.status, 401);
   const verified = await body(await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'settings-adult-password-123', deviceId: device } }));
   assert.ok(verified.authorization.token);
-  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
+  const verifiedAgain = await body(await call('/api/settings/verify-password', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { password: 'settings-adult-password-123', deviceId: device } }));
+  assert.notEqual(verifiedAgain.authorization.token, verified.authorization.token);
+  const staleAuth = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verified.authorization.token }, data: { pin: '2468', deviceId: device } });
+  assert.equal(staleAuth.status, 403);
+  const pinSet = await call('/api/profile-lock/pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device, 'x-nyxthea-settings-auth': verifiedAgain.authorization.token }, data: { pin: '2468', deviceId: device } });
   assert.equal(pinSet.status, 200);
   const pinVerified = await body(await call('/api/settings/verify-pin', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { pin: '2468', deviceId: device } }));
   assert.ok(pinVerified.authorization.token);
   assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device},data:{deviceId:device}})).status,403);
-  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':verified.authorization.token},data:{deviceId:device}})).status,200);
+  assert.equal((await call('/api/profile-lock/biometric',{method:'DELETE',cookie:adultCookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':pinVerified.authorization.token},data:{deviceId:device}})).status,200);
 
   const met = await body(await call('/api/household/meet', { method: 'POST', cookie: adultCookie, headers: { 'x-nyxthea-device': device }, data: { displayName: 'Child', birthday: '2018-08-01', relationshipToRequester: 'daughter' } }));
   const claimed = await call('/api/auth/claim', { method: 'POST', data: { inviteCode: met.claimCode, username: 'settings-child', password: 'settings-child-password-123' } });
@@ -214,7 +238,7 @@ test('household owner can manage integrations and save interface modules without
 });
 
 
-test('real household owner can revoke a member grant without a legacy admin flag', async () => {
+test('household owner cannot revoke a grant to an external recipient', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method:'POST', data:{ username:'grant-owner', displayName:'Owner', password:'grant-owner-password-123' } });
   const info=await body(signup),cookie=signup.headers.get('set-cookie').split(';')[0],device='grant-owner-phone';
@@ -224,9 +248,10 @@ test('real household owner can revoke a member grant without a legacy admin flag
     id:'grant_household_member',from:met.profile.id,to:'external-recipient',domain:'preferences',permissions:['read'],active:true,createdAt:new Date().toISOString(),revokedAt:null,revokedBy:null
   });
   const revoked=await call('/api/profiles/grants/grant_household_member',{method:'DELETE',cookie,headers:{'x-nyxthea-device':device}});
-  assert.equal(revoked.status,200);
-  assert.equal((await body(revoked)).revoked,true);
-  assert.equal(table('profile_grants').get('grant_household_member').revokedBy,info.profile.id);
+  assert.equal(revoked.status,403);
+  const storedGrant=table('profile_grants').get('grant_household_member');
+  assert.ok(!storedGrant || storedGrant.active===true);
+  assert.ok(!storedGrant || storedGrant.revokedBy===null);
 });
 
 test('device trust changes require fresh Settings verification', async () => {
@@ -266,6 +291,17 @@ test('changing the account password rotates sessions but keeps the current devic
 });
 
 
+test('fresh Settings authorization is single-use for sensitive changes', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup=await call('/api/auth/register',{method:'POST',data:{username:'single-use-auth',displayName:'Single Use',password:'single-use-password-123'}});
+  const cookie=signup.headers.get('set-cookie').split(';')[0],device='single-use-phone';
+  const verified=await body(await call('/api/settings/verify-password',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{password:'single-use-password-123',deviceId:device}}));
+  const token=verified.authorization.token;
+  const first=await call('/api/devices/register',{method:'POST',cookie,headers:{'x-nyxthea-device':device},data:{deviceId:'tablet'}});assert.equal(first.status,201);
+  assert.equal((await call('/api/devices/tablet/trust',{method:'POST',cookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':token},data:{trusted:true}})).status,200);
+  assert.equal((await call('/api/devices/tablet/trust',{method:'POST',cookie,headers:{'x-nyxthea-device':device,'x-nyxthea-settings-auth':token},data:{trusted:false}})).status,403);
+});
+
 test('adult profile cannot be unlocked through a direct bypass endpoint', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'lock-bypass', displayName: 'Adult', password: 'lock-bypass-password-123' } });
@@ -277,4 +313,26 @@ test('adult profile cannot be unlocked through a direct bypass endpoint', async 
   assert.equal(bypass.status, 404);
   const pin = await call('/api/profile-lock/pin/verify', { method: 'POST', cookie, headers: { 'x-nyxthea-device': device }, data: { pin: '1357', deviceId: device } });
   assert.equal(pin.status, 200);
+});
+
+test('CI ingestion is secret-gated and persists a valid build report', async () => {
+  resetStateForTests(); storage.rows.clear(); delete env.NYXTHEA_CI_INGEST_TOKEN; object=new NyxtheaState({storage},env);
+  const payload={runId:'ci-1',repository:'cheyennepeters24-dotcom/NyxThea',branch:'fix/test',sha:'abc123',status:'completed',conclusion:'success',jobs:[{name:'tests',result:'success'}]};
+  assert.equal((await call('/api/internal/ci-report',{method:'POST',data:payload})).status,503);
+  env.NYXTHEA_CI_INGEST_TOKEN='test-ingest-secret'; object=new NyxtheaState({storage},env);
+  assert.equal((await call('/api/internal/ci-report',{method:'POST',data:payload,headers:{authorization:'Bearer wrong'}})).status,401);
+  const accepted=await call('/api/internal/ci-report',{method:'POST',data:payload,headers:{authorization:'Bearer test-ingest-secret'}});
+  assert.equal(accepted.status,201); assert.equal((await body(accepted)).build.runId,'ci-1');
+  assert.equal(table('ci_build_runs').get('ci-1').conclusion,'success');
+  delete env.NYXTHEA_CI_INGEST_TOKEN;
+});
+
+
+test('System Admin diagnostics stay isolated from ordinary household profiles', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup=await call('/api/auth/register',{method:'POST',data:{username:'ordinary-admin-check',displayName:'Ordinary',password:'ordinary-password-123'}}),cookie=signup.headers.get('set-cookie').split(';')[0];
+  assert.equal((await call('/api/admin/system',{cookie})).status,403);
+  const info=await body(signup);table('system_admins').set(info.profile.id,{profileId:info.profile.id,active:true});
+  table('ci_build_runs').set('run-1',{runId:'run-1',status:'completed',conclusion:'success',url:'https://github.com/example/repo/actions/runs/1',jobs:[],receivedAt:new Date().toISOString()});
+  const allowed=await call('/api/admin/system',{cookie});assert.equal(allowed.status,200);const data=await body(allowed);assert.equal(data.buildHealth[0].runId,'run-1');
 });

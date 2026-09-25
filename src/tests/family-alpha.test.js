@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resetStateForTests } from "../state/store.js";
+import { resetStateForTests, table } from "../state/store.js";
 import { createProfile } from "../profiles/profiles.js";
-import { addPersonToHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity } from "../profiles/household-identity.js";
+import { addPersonToHousehold, householdSummary, profileIdentity, registerDevice, saveProfileIdentity, setRelationship } from "../profiles/household-identity.js";
 
 test("a personal profile grows into a family household when Nyxthea meets a second person", () => {
   resetStateForTests();
@@ -46,3 +46,62 @@ test("DOB-derived minor profile is marked child", () => {
   assert.equal(profileIdentity(child.id).developmentalStage,"young_child");
 });
 
+
+
+test("partial birthdays and relationships reject invalid identity data",()=>{
+  resetStateForTests();
+  const adult=createProfile({displayName:"Adult",permissions:["household_admin"]});
+  saveProfileIdentity(adult,{preferredName:"Adult",birthdayMonthDay:"02-29"});
+  assert.throws(()=>saveProfileIdentity(adult,{birthdayMonthDay:"02-30"}),/valid date/);
+  const outsider=createProfile({displayName:"Outsider"});
+  assert.throws(()=>setRelationship(adult.id,outsider.id,"friend"),/same household/);
+});
+
+
+test("household move clears prior relationship records",()=>{
+ resetStateForTests();
+ const a=createProfile({displayName:"A",permissions:["household_admin"]}),b=createProfile({displayName:"B"}),c=createProfile({displayName:"C",permissions:["household_admin"]});
+ saveProfileIdentity(a,{preferredName:"A"});saveProfileIdentity(b,{preferredName:"B"});saveProfileIdentity(c,{preferredName:"C"});
+ addPersonToHousehold(a,b,{relationshipToRequester:"friend"});
+ assert.equal([...table("profile_relationships").values()].filter(x=>x.fromProfileId===b.id||x.toProfileId===b.id).length,2);
+ addPersonToHousehold(c,b,{relationshipToRequester:"friend"});
+ const edges=[...table("profile_relationships").values()].filter(x=>x.fromProfileId===b.id||x.toProfileId===b.id);
+ assert.equal(edges.length,2);assert.ok(edges.every(x=>x.fromProfileId===c.id||x.toProfileId===c.id));
+});
+
+
+test("household lookup repairs duplicate and orphan active memberships",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]});saveProfileIdentity(owner,{preferredName:"Owner"});
+ const valid=householdSummary(owner.id),memberships=table("household_memberships");
+ memberships.set("corrupt-orphan",{householdId:"missing-household",profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ memberships.set("duplicate-valid",{householdId:valid.id,profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ const repaired=householdSummary(owner.id);
+ assert.equal(repaired.id,valid.id);
+ const active=[...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false);
+ assert.equal(active.length,1);assert.equal(active[0].householdId,valid.id);
+});
+
+
+test("household repair keeps the canonical membership when two valid households exist",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]});saveProfileIdentity(owner,{preferredName:"Owner"});
+ const canonical=householdSummary(owner.id),memberships=table("household_memberships"),households=table("households");
+ const other={id:"household-other",name:"Other",mode:"family",createdBy:"someone-else",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+ households.set(other.id,other);memberships.set("duplicate-other",{householdId:other.id,profileId:owner.id,role:"member",active:true,joinedAt:new Date().toISOString()});
+ const repaired=householdSummary(owner.id);
+ assert.equal(repaired.id,canonical.id);
+ assert.equal([...memberships.values()].filter(x=>x.profileId===owner.id&&x.active!==false).length,1);
+});
+
+test("household repair removes relationships whose other endpoint is outside the surviving household",()=>{
+ resetStateForTests();
+ const owner=createProfile({displayName:"Owner",permissions:["household_admin"]}),member=createProfile({displayName:"Member"}),outsider=createProfile({displayName:"Outsider"});
+ saveProfileIdentity(owner,{preferredName:"Owner"});saveProfileIdentity(member,{preferredName:"Member"});saveProfileIdentity(outsider,{preferredName:"Outsider"});
+ addPersonToHousehold(owner,member,{relationshipToRequester:"friend"});
+ const relationships=table("profile_relationships");
+ relationships.set(`${owner.id}:${outsider.id}`,{id:`${owner.id}:${outsider.id}`,fromProfileId:owner.id,toProfileId:outsider.id,type:"friend",confirmed:true,updatedAt:new Date().toISOString()});
+ householdSummary(owner.id);
+ assert.equal([...relationships.values()].some(x=>x.fromProfileId===owner.id&&x.toProfileId===outsider.id),false);
+ assert.equal([...relationships.values()].some(x=>x.fromProfileId===owner.id&&x.toProfileId===member.id),true);
+});

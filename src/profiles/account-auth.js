@@ -13,8 +13,9 @@ const hex = bytes => [...new Uint8Array(bytes)].map(n => n.toString(16).padStart
 async function digest(value) { return hex(await crypto.subtle.digest('SHA-256', encoder.encode(value))); }
 async function derive(password, salt) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' }, key, 256));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 210000, hash: 'SHA-256' }, key, 256));
 }
+function constantTimeEqual(a,b){const left=String(a||""),right=String(b||""),length=Math.max(left.length,right.length);let diff=left.length^right.length;for(let i=0;i<length;i++)diff|=(left.charCodeAt(i)||0)^(right.charCodeAt(i)||0);return diff===0;}
 const random = () => `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`;
 const sixDigitCode=()=>String((crypto.getRandomValues(new Uint32Array(1))[0]%900000)+100000);
 function validUsername(value) { const name = String(value || '').trim().toLowerCase(); if (!/^[a-z][a-z0-9._-]{2,31}$/.test(name)) failure('Username must be 3–32 letters, numbers, dots, dashes, or underscores.'); return name; }
@@ -47,7 +48,8 @@ export async function claimProfileAccount({ inviteCode, username, password }) {
   if (accounts().has(name)) failure('That username is unavailable.', 409);
   const key = await digest(String(inviteCode || ''));
   const invite = claims().get(key);
-  if (!invite || invite.usedAt || invite.expiresAt <= Date.now()) failure('That household invite is invalid or expired.', 401);
+  const inviteExpiry=Number(invite?.expiresAt);
+  if (!invite || invite.usedAt || !Number.isFinite(inviteExpiry) || inviteExpiry <= Date.now()) failure('That household invite is invalid or expired.', 401);
   const profile = profileById(invite.profileId);
   if (!profile) failure('Profile is unavailable.', 404);
   if ([...accounts().values()].some(account => account.profileId === profile.id)) failure('That profile already has a sign-in.', 409);
@@ -61,7 +63,7 @@ export async function verifyAccountPassword(profileId, password) {
   const salt=record?.salt||"nyxthea-missing-account";
   const expected=record?.passwordHash||await digest("nyxthea-missing-password");
   const actual=await derive(String(password||""),salt);
-  if(!record||actual!==expected)failure("Password is incorrect.",401);
+  if(!record||!constantTimeEqual(actual,expected))failure("Password is incorrect.",401);
   return {ok:true};
 }
 export function accountRecoveryStatus(profileId) {
@@ -88,8 +90,8 @@ export function cancelRecoveryEmailVerification(profileId){
 }
 export async function confirmRecoveryEmail(profileId,code){
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
-  if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now())failure("Email verification code is invalid or expired.",401);
-  if(await digest(String(code||""))!==record.pendingRecoveryEmailCodeHash)failure("Email verification code is invalid or expired.",401);
+  const actualCodeHash=await digest(String(code||"")),expectedCodeHash=record?.pendingRecoveryEmailCodeHash||await digest("nyxthea-missing-email-verification");
+  if(!record?.pendingRecoveryEmail||record.pendingRecoveryEmailExpiresAt<=Date.now()||!constantTimeEqual(actualCodeHash,expectedCodeHash))failure("Email verification code is invalid or expired.",401);
   record.recoveryEmail=record.pendingRecoveryEmail;record.recoveryEmailVerified=true;
   delete record.pendingRecoveryEmail;delete record.pendingRecoveryEmailCodeHash;delete record.pendingRecoveryEmailExpiresAt;
   return {recoveryEmail:record.recoveryEmail,recoveryEmailVerified:true};
@@ -109,8 +111,8 @@ export function cancelEmailPasswordRecovery(username){
 }
 export async function completeEmailPasswordRecovery({username,code,newPassword}){
   const name=String(username||"").trim().toLowerCase(),record=accounts().get(name);validPassword(newPassword);
-  if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now())failure("Email recovery code is invalid or expired.",401);
-  if(await digest(String(code||""))!==record.emailRecoveryCodeHash)failure("Email recovery code is invalid or expired.",401);
+  const actualCodeHash=await digest(String(code||"")),expectedCodeHash=record?.emailRecoveryCodeHash||await digest("nyxthea-missing-email-recovery");
+  if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now()||!constantTimeEqual(actualCodeHash,expectedCodeHash))failure("Email recovery code is invalid or expired.",401);
   const salt=random(),passwordHash=await derive(newPassword,salt),nextCode=random();
   record.salt=salt;record.passwordHash=passwordHash;record.recoveryHash=await digest(nextCode);
   delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
@@ -135,7 +137,7 @@ export async function loginAccount({ username, password }) {
   const salt = record?.salt || 'nyxthea-missing-account';
   const expected = record?.passwordHash || await digest('nyxthea-missing-password');
   const actual = await derive(String(password || ''), salt);
-  if (!record || actual !== expected) failure('Username or password is incorrect.', 401);
+  if (!record || !constantTimeEqual(actual, expected)) failure('Username or password is incorrect.', 401);
   const profile = profileById(record.profileId);
   if (!profile) failure('Account profile is unavailable.', 503);
   return { profile: profileSummary(profile), token: await makeSession(profile.id) };
@@ -144,7 +146,7 @@ export async function cookieProfile(request) {
   const token = cookie(request); if (!token) return null;
   const key = await digest(token), session = sessions().get(key);
   if (!session) return null;
-  if (session.expiresAt <= Date.now()) { sessions().delete(key); return null; }
+  if (!Number.isFinite(Number(session.expiresAt)) || Number(session.expiresAt) <= Date.now()) { sessions().delete(key); return null; }
   return profileById(session.profileId);
 }
 export async function logoutAccount(request) { const token = cookie(request); if (token) sessions().delete(await digest(token)); }
@@ -167,8 +169,8 @@ export async function recoverAccount({ username, recoveryCode, newPassword }) {
   const name = String(username || '').trim().toLowerCase();
   validPassword(newPassword);
   const record = accounts().get(name);
-  const actual = await digest(String(recoveryCode || ''));
-  if (!record || !record.recoveryHash || record.recoveryHash !== actual) failure('Recovery details are incorrect.', 401);
+  const actual = await digest(String(recoveryCode || '')), expected = record?.recoveryHash || await digest('nyxthea-missing-recovery-code');
+  if (!record || !record.recoveryHash || !constantTimeEqual(expected, actual)) failure('Recovery details are incorrect.', 401);
   const salt = random(), passwordHash = await derive(newPassword, salt), nextCode = random();
   record.salt = salt; record.passwordHash = passwordHash; record.recoveryHash = await digest(nextCode);
   for (const [key, session] of sessions()) if (session.profileId === record.profileId) sessions().delete(key);

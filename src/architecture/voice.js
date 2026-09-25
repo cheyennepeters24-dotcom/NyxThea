@@ -10,12 +10,13 @@ export const CORE_VOICE=Object.freeze({
 });
 const sessions=()=>table("voice_sessions");
 export function assessWakeContext({phrase="",confidence=0,authorizedNicknames=[],contextConfidence=0}){
- const normalized=phrase.trim().toLowerCase(),recognized=wakeWords.includes(normalized)||authorizedNicknames.includes(normalized);
- const safeToRespond=recognized&&Number(confidence)>=.85&&Number(contextConfidence)>=.75;
+ const normalized=phrase.trim().toLowerCase(),recognized=wakeWords.includes(normalized)||authorizedNicknames.map(a=>String(a).trim().toLowerCase()).includes(normalized);
+ const safeToRespond=recognized&&Number(confidence)>=.7&&Number(contextConfidence)>=.6;
  return {recognized,safeToRespond,response:safeToRespond?"session_may_start":"remain_quiet"};
 }
-// Only an explicit address followed by a request opens a hands-free turn.
-// The browser cannot identify a speaker, so this never grants permissions.
+// An explicit address is enough to engage NyxThea. If words follow the alias,
+// pass them through as the request instead of rejecting natural phrasing.
+// Browser recognition is convenience only and never grants authorization.
 export function assessWakeTranscript({transcript="",confidence=0,authorizedNicknames=[]}={}){
  const aliases=[...wakeWords,...authorizedNicknames].filter(a=>typeof a==="string"&&a.trim()).sort((a,b)=>b.length-a.length);
  const spoken=String(transcript).trim().replace(/[.!?]+$/,"");
@@ -24,9 +25,10 @@ export function assessWakeTranscript({transcript="",confidence=0,authorizedNickn
   const match=spoken.match(new RegExp(`^(?:hey[ ,]+)?${escaped}(?:[ ,.!?]+|$)(.*)$`,"i"));
   if(!match)continue;
   const request=match[1].trim();
-  const plausible=/^(?:(?:can|could|would|will)\s+(?:you|we|i)\b|(?:what|where|when|why|how|who|tell|show|help|please|remind|remember|make|find|look|play|explain|do|let)\b|(?:is|are)\s+(?:it|there|you|my|your|we)\b)/i.test(request);
-  const safeToRespond=Number(confidence)>=.8&&request.length>=4&&plausible;
-  return {recognized:true,safeToRespond,request:safeToRespond?request:"",response:safeToRespond?"session_may_start":"remain_quiet"};
+  if(!request&&Number(confidence)>=.65)return {recognized:true,safeToRespond:true,request:"",response:"session_may_start"};
+  const quotedOrCorrective=/\b(?:said|say|called|named|name is|not the assistant|don't call|do not call)\b/i.test(request)||/^is\s+(?:a|an|the)\b/i.test(request);
+  const safeToRespond=Number(confidence)>=.65&&!quotedOrCorrective;
+  return {recognized:safeToRespond,safeToRespond,request:safeToRespond?request:"",response:safeToRespond?"session_may_start":"remain_quiet"};
  }
  return {recognized:false,safeToRespond:false,request:"",response:"remain_quiet"};
 }

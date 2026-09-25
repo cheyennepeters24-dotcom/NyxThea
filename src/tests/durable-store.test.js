@@ -68,3 +68,13 @@ test("successive requests reuse the persisted baseline and retain in-place chang
   await hydrateDurableState(storage);
   assert.equal(table("experience_settings").get("person").soundMode, "off");
 });
+
+
+test("malformed durable keys do not prevent valid state from hydrating",async()=>{
+  resetStateForTests();const storage=new FakeStorage();
+  storage.rows.set("nyxthea-state:profiles:%E0%A4%A",{id:"broken"});
+  storage.rows.set("nyxthea-state:profiles:owner",{id:"owner",displayName:"Owner"});
+  await hydrateDurableState(storage);
+  assert.equal(table("profiles").get("owner").displayName,"Owner");
+  assert.equal(table("profiles").size,1);
+});
