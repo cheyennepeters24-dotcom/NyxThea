@@ -67,7 +67,7 @@ export async function verifyProfilePin(profile,{pin}={}){
 }
 export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={}){
   assertAdult(profile);
-  const d=String(deviceId||"").trim().slice(0,128);if(!d)fail("Device identifier is required.");
+  const d=String(deviceId||"").trim();if(!d||d.length>128)fail("Device identifier is required and must be at most 128 characters.");
   if(!["register","unlock","settings"].includes(purpose))fail("Unsupported biometric purpose.");
   const trustedOrigin=String(origin||"").trim().slice(0,240),trustedRpId=String(rpId||"").trim().slice(0,240);if(!trustedOrigin||!trustedRpId)fail("Biometric site identity is required.");
   let parsedOrigin;try{parsedOrigin=new URL(trustedOrigin)}catch{fail("Biometric site identity is invalid.");}const host=parsedOrigin.hostname.toLowerCase(),rp=trustedRpId.toLowerCase(),local=host==="localhost"||host==="127.0.0.1"||host==="::1",secure=parsedOrigin.protocol==="https:"||(parsedOrigin.protocol==="http:"&&local),rpMatches=host===rp||host.endsWith(`.${rp}`);if(!secure||!rpMatches)fail("Biometric site identity is invalid.");
@@ -77,7 +77,7 @@ export function beginBiometric(profile,{deviceId,purpose="unlock",origin,rpId}={
 }
 function readChallenge(profile,deviceId,purpose){
   const key=`${profile.id}:${deviceId}:${purpose}`,record=challenges().get(key);
-  if(!record||record.expiresAt<=Date.now())fail("Biometric challenge is invalid or expired.",401);
+  const expiry=Number(record?.expiresAt);if(!record||!Number.isFinite(expiry)||expiry<=Date.now())fail("Biometric challenge is invalid or expired.",401);
   challenges().delete(key);return record;
 }
 function parseClientData(value,record,expectedType){
@@ -87,7 +87,7 @@ function parseClientData(value,record,expectedType){
 }
 export async function addBiometricCredential(profile,{deviceId,credentialId,publicKey,algorithm=-7,label,clientDataJSON,authenticatorData}={}){
   assertAdult(profile);
-  const d=String(deviceId||"").trim().slice(0,128),c=String(credentialId||"").trim().slice(0,1024),p=String(publicKey||"").trim(),alg=Number(algorithm);
+  const d=String(deviceId||"").trim(),c=String(credentialId||"").trim(),p=String(publicKey||"").trim(),alg=Number(algorithm);
   if(!d||!c||!p||!clientDataJSON||!authenticatorData)fail("Device biometric credential is incomplete.");
   if(![-7,-257].includes(alg))fail("Unsupported biometric credential algorithm.");
   if(p.length>8192)fail("Biometric public key is too large.");
@@ -106,7 +106,7 @@ export async function addBiometricCredential(profile,{deviceId,credentialId,publ
 }
 export async function verifyBiometricCredential(profile,{deviceId,purpose="unlock",credentialId,clientDataJSON,authenticatorData,signature}={}){
   assertAdult(profile);
-  const d=String(deviceId||"").trim().slice(0,128),current=locks().get(profile.id),credential=(current?.biometricDevices||[]).find(x=>x.deviceId===d&&x.credentialId===credentialId);
+  const d=String(deviceId||"").trim(),current=locks().get(profile.id),credential=(current?.biometricDevices||[]).find(x=>x.deviceId===d&&x.credentialId===credentialId);
   if(!credential)fail("Device biometric unlock is not registered.",404);
   const challenge=readChallenge(profile,d,purpose);parseClientData(clientDataJSON,challenge,"webauthn.get");
   const auth=fromB64url(authenticatorData);if(auth.length<37||auth.length>16384)fail("Biometric response is invalid.",401);
@@ -139,8 +139,8 @@ export function markDeviceUnlocked(profile,{deviceId}={}){
   assertAdult(profile);
   const current=locks().get(profile.id);
   if(!current?.enabled)return {ok:true,locked:false};
-  const stable=String(deviceId||"").trim().slice(0,128);
-  if(!stable)fail("Device identifier is required.");
+  const stable=String(deviceId||"").trim();
+  if(!stable||stable.length>128)fail("Device identifier is required and must be at most 128 characters.");
   current.unlockedDevices=Array.isArray(current.unlockedDevices)?current.unlockedDevices:[];
   if(!current.unlockedDevices.includes(stable))current.unlockedDevices.push(stable);
   current.updatedAt=now();locks().set(profile.id,current);
@@ -150,8 +150,8 @@ export function markDeviceLocked(profile,{deviceId}={}){
   assertAdult(profile);
   const current=locks().get(profile.id);
   if(!current)return {ok:true,locked:false};
-  const stable=String(deviceId||"").trim().slice(0,128);
-  if(!stable)fail("Device identifier is required.");
+  const stable=String(deviceId||"").trim();
+  if(!stable||stable.length>128)fail("Device identifier is required and must be at most 128 characters.");
   current.unlockedDevices=(current.unlockedDevices||[]).filter(x=>x!==stable);
   current.updatedAt=now();locks().set(profile.id,current);
   return {ok:true,locked:true,deviceId:stable};
@@ -160,7 +160,8 @@ export function deviceLockState(profile,{deviceId}={}){
   assertAdult(profile);
   const current=locks().get(profile.id);
   if(!current?.enabled)return {enabled:false,locked:false};
-  const stable=String(deviceId||"").trim().slice(0,128);
-  const unlocked=stable&&(current.unlockedDevices||[]).includes(stable);
+  const stable=String(deviceId||"").trim();
+  if(stable.length>128)fail("Device identifier must be at most 128 characters.");
+  const unlocked=stable&&Array.isArray(current.unlockedDevices)&&current.unlockedDevices.includes(stable);
   return {enabled:true,locked:!unlocked,deviceId:stable,stayUnlockedOnDevice:current.stayUnlockedOnDevice!==false};
 }
