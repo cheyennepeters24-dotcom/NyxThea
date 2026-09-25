@@ -123,15 +123,15 @@ test('voice transcription needs a signed-in session and bounds the uploaded clip
   } finally { delete env.AI; }
 });
 
-test('voice activation checks a registered name without trusting a caller-supplied nickname', async () => {
+test('voice activation accepts only Nyx and ignores caller-supplied aliases', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const signup = await call('/api/auth/register', { method: 'POST', data: { username: 'wake-tester', displayName: 'Wake', password: 'wake-test-password-123' } });
   const cookie = signup.headers.get('set-cookie').split(';')[0];
-  const phrase = { transcript: 'House Rose, can you help?', confidence: .92, authorizedNicknames: ['house rose'] };
-  assert.equal((await call('/api/voice/interpret', { method: 'POST', data: phrase })).status, 401);
-  assert.equal((await body(await call('/api/voice/interpret', { method: 'POST', cookie, data: phrase }))).safeToRespond, false);
-  await call('/api/voice/nicknames', { method: 'POST', cookie, data: { nicknames: ['house rose'] } });
-  const result = await body(await call('/api/voice/interpret', { method: 'POST', cookie, data: phrase }));
+  const forged = { transcript: 'House Rose, can you help?', confidence: .92, authorizedNicknames: ['house rose'] };
+  assert.equal((await call('/api/voice/interpret', { method: 'POST', data: forged })).status, 401);
+  assert.equal((await body(await call('/api/voice/interpret', { method: 'POST', cookie, data: forged }))).safeToRespond, false);
+  assert.equal((await call('/api/voice/nicknames', { method: 'POST', cookie, data: { nicknames: ['house rose'] } })).status,404);
+  const result = await body(await call('/api/voice/interpret', { method: 'POST', cookie, data: { transcript:'Nyx, can you help?', confidence:.92 } }));
   assert.equal(result.safeToRespond, true);
   assert.equal(result.request, 'can you help');
 });
