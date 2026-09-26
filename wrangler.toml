@@ -19,6 +19,7 @@ storage = "sqlite"
 [ai]
 binding = "AI"
 
+# Keep this Worker custom-domain binding managed by Cloudflare; do not replace it with a manual A/AAAA record.
 [[routes]]
 pattern = "nyxthea.thecrimsonbluerose.com"
 custom_domain = true
