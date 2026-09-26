@@ -5,14 +5,14 @@ import { classifyAction } from "../intelligence/agency.js";
 import { attentionDecision } from "../intelligence/attention.js";
 import { identityPolicy, spokenPrivacy } from "../privacy/identity-policy.js";
 import { assessWakeTranscript } from "../architecture/voice.js";
-test("voice activation requires a clear address and request, including profile nicknames",()=>{
- assert.equal(assessWakeTranscript({transcript:"Hey Nixie, can you help me?",confidence:.91}).request,"can you help me");
+test("voice activation requires Nyx as the clear wake word",()=>{
+ assert.equal(assessWakeTranscript({transcript:"Nyx, can you help me?",confidence:.91}).request,"can you help me");
+ assert.equal(assessWakeTranscript({transcript:"Nixie, can you help me?",confidence:.99}).safeToRespond,false);
  assert.equal(assessWakeTranscript({transcript:"Nyxthea is a good name",confidence:.99}).safeToRespond,false);
  assert.equal(assessWakeTranscript({transcript:"I said Nyx, not the assistant",confidence:.99}).recognized,false);
  assert.equal(assessWakeTranscript({transcript:"NYX, what time is it?",confidence:.32}).safeToRespond,false);
- assert.equal(assessWakeTranscript({transcript:"House Rose, tell me something",confidence:.9,authorizedNicknames:["house rose"]}).safeToRespond,true);
 });
-test("experience defaults match approved NyxThea behavior",()=>{const s=defaultExperience("p");assert.equal(s.proactiveMode,"helpful");assert.equal(s.handsFreeEnabled,false);assert.equal(updateExperience("p",{handsFreeEnabled:true}).handsFreeEnabled,true);assert.equal(s.soundMode,"minimal");assert.equal(s.lockScreenPrivacy,"private");assert.equal(rosePresentation("emergency").rose,"blue");assert.equal(rosePresentation("emergency").background,"red_glow");});
+test("experience defaults match approved NyxThea behavior",()=>{const s=defaultExperience("p");assert.equal(s.proactiveMode,"helpful");assert.equal(s.handsFreeEnabled,false);assert.equal(s.wakeEnrollmentComplete,false);assert.equal(s.wakeEnrollmentSamples,0);const enrolled=updateExperience("p",{handsFreeEnabled:true,wakeEnrollmentComplete:true,wakeEnrollmentSamples:5,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:"phone-1",wakeEnrollmentUpdatedAt:"2026-09-25T00:00:00.000Z"});assert.equal(enrolled.handsFreeEnabled,true);assert.equal(enrolled.wakeEnrollmentComplete,true);assert.equal(enrolled.wakeEnrollmentSamples,5);assert.equal(s.soundMode,"minimal");assert.equal(s.lockScreenPrivacy,"private");assert.equal(rosePresentation("emergency").rose,"blue");assert.equal(rosePresentation("emergency").background,"red_glow");assert.throws(()=>updateExperience("p",{wakeEnrollmentSamples:6}),/Invalid wakeEnrollmentSamples/);});
 test("conversation yields to human and preserves natural backchannels",()=>{assert.equal(interpretTurn({utterance:"Wait",assistantSpeaking:true}).interrupt,true);assert.equal(interpretTurn({utterance:"yeah",assistantSpeaking:true}).backchannel,true);assert.equal(interpretTurn({utterance:"short version",assistantSpeaking:true}).control,"shorten");});
 test("failure remains usable",()=>{assert.equal(recoveryLanguage({kind:"voice"}).fallback,"text");assert.match(recoveryLanguage({kind:"offline"}).message,/still here/);});
 test("agency keeps consequences under human control",()=>{const a=classifyAction({intent:"act",type:"purchase",external:true});assert.equal(a.requiresConfirmation,true);assert.equal(a.requiresAuthentication,true);});
