@@ -31,6 +31,7 @@ export function defaultExperience(profileId) {
     profileId, proactiveMode:"helpful", communicationStyle:"natural", soundMode:"minimal",
     motionMode:"full", lockScreenPrivacy:"private", focusMode:false, doNotDisturb:false,
     privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
+    wakeEnrollmentComplete:false, wakeEnrollmentSamples:0, wakeEnrollmentVersion:0, wakeEnrollmentDeviceId:null, wakeEnrollmentUpdatedAt:null,
     visibleModules:["world","devices","health","security","memories","music","vehicle"],
     pronunciation:null, preferredName:null, onboarded:false, onboardingVersion:0, updatedAt:now()
   };
@@ -41,7 +42,11 @@ export function updateExperience(profileId, patch={}) {
   const next={...current};
   const enumSet=(key,values)=>{ if(patch[key]!==undefined){ if(!values.includes(patch[key])) throw Object.assign(new Error("Invalid "+key+"."),{status:400}); next[key]=patch[key]; }};
   enumSet("proactiveMode",proactiveModes); enumSet("communicationStyle",communicationStyles); enumSet("soundMode",soundModes); enumSet("motionMode",motionModes); enumSet("lockScreenPrivacy",lockScreenPrivacy);
-  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","handsFreeConfigured","voiceAssistantMode","decorativeSounds"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
+  for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","handsFreeConfigured","voiceAssistantMode","decorativeSounds","wakeEnrollmentComplete"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
+  if(patch.wakeEnrollmentSamples!==undefined){const count=Number(patch.wakeEnrollmentSamples);if(!Number.isInteger(count)||count<0||count>5)throw Object.assign(new Error("Invalid wakeEnrollmentSamples."),{status:400});next.wakeEnrollmentSamples=count;}
+  if(patch.wakeEnrollmentVersion!==undefined){const version=Number(patch.wakeEnrollmentVersion);if(!Number.isInteger(version)||version<0||version>20)throw Object.assign(new Error("Invalid wakeEnrollmentVersion."),{status:400});next.wakeEnrollmentVersion=version;}
+  if(patch.wakeEnrollmentDeviceId!==undefined)next.wakeEnrollmentDeviceId=patch.wakeEnrollmentDeviceId===null?null:String(patch.wakeEnrollmentDeviceId).trim().slice(0,128)||null;
+  if(patch.wakeEnrollmentUpdatedAt!==undefined){const value=patch.wakeEnrollmentUpdatedAt===null?null:String(patch.wakeEnrollmentUpdatedAt);if(value&&!Number.isFinite(Date.parse(value)))throw Object.assign(new Error("Invalid wakeEnrollmentUpdatedAt."),{status:400});next.wakeEnrollmentUpdatedAt=value;}
   for(const key of ["pronunciation","preferredName"]) if(patch[key]!==undefined) next[key]=patch[key]===null?null:String(patch[key]).trim().slice(0,120);
   if(patch.visibleModules!==undefined){ if(!Array.isArray(patch.visibleModules)) throw Object.assign(new Error("Invalid visibleModules."),{status:400}); next.visibleModules=[...new Set(patch.visibleModules.map(String).filter(x=>interfaceModules.includes(x)))]; }
   if(patch.onboarded!==undefined) next.onboarded=Boolean(patch.onboarded); if(patch.onboardingVersion!==undefined) next.onboardingVersion=Math.max(0,Math.min(99,Number(patch.onboardingVersion)||0));
