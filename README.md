@@ -87,7 +87,7 @@ The modules in `src/architecture`, `src/profiles`, and `src/integrations` establ
 - configurable emergency workflow proposals requiring multiple independent authorized signals before a workflow can begin; any actual message, contact, or emergency-services dispatch requires an active authorized connection;
 - pets, vehicle diagnostics/maintenance, health and wellness, and business opportunity evaluation without embedded personal information;
 - official-API, least-privilege adapter requests for Apple/Siri/iPhone, Amazon/Alexa/Echo, Google/Nest, smart-home devices, TVs, vehicles, wearables, computers, and other providers;
-- a permanent female Nyxthea voice identity with wake words (`Nyxthea`, `Nyx`, `Nixie`), authorized nicknames, interruption handling, and confidence thresholds that keep the system quiet when uncertain; and
+- a permanent female Nyxthea voice identity with **`Nyx` as the only wake word**; `NyxThea` and `Nixie` remain conversational names. The production wake detector is planned as a local ONNX model with interruption handling and conservative confidence thresholds; and
 - bounded adaptation through `listen → remember → analyze → adapt → test → measure → improve`, with privacy, authorization, safety, and capability honesty protected from self-modification.
 
 None of these connections, hardware inputs, voice services, emergency contacts, health sources, or external actions are active in this foundation. Basic Emergency Mode does not automatically contact emergency services or trusted adults, record audio/video, or track location in the background. Its call control is a user-initiated handoff to the device dialer.
