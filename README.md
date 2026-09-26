@@ -106,6 +106,10 @@ This Worker now includes testable registries and APIs for profiles and profile c
 
 External providers remain disconnected: there is no hardware access, OAuth provider, TTS/STT provider, emergency dispatch, health-data source, vehicle telemetry source, pet-system source, or third-party account connection. An integration authorization record is not an external connection and never activates provider actions.
 
+## Nyx wake enrollment
+
+Hands-free wake now requires a per-device five-sample enrollment. During first use (or when enabling hands-free on a new device), NyxThea asks the signed-in person to say **“Nyx” five times** with natural variation. The browser confirms each utterance, persists only enrollment metadata (sample count, version, device ID, and timestamp), and does not treat wake enrollment as authentication. If enrollment cannot be completed, hands-free wake remains off while text and tap-to-talk remain available. This calibration flow is ready to sit in front of the planned local ONNX detector; the current browser wake listener remains the temporary runtime until the ONNX model is added.
+
 ## Account sign-in and first run
 
 The published Worker offers username/password accounts with PBKDF2 password hashes, HTTP-only secure session cookies, durable account/session storage, same-origin checks on account changes, and a one-time recovery code that rotates after use. New accounts get only their own ordinary profile; registration never claims the pre-existing owner profile. The preferred name, pronunciation cue, communication style, and first-run completion save to the profile's durable experience settings. Browser speech recognition and synthesis remain dependent on device/browser support and may pronounce names differently despite the stored cue. Keep the recovery code private: there is no email identity verification or email reset provider connected.
