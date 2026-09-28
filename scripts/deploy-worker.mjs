@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+const prepareWake=spawnSync(process.execPath,["scripts/prepare-wake-runtime.mjs"],{stdio:"inherit",env:process.env});
+if(prepareWake.error)throw prepareWake.error;
+if(prepareWake.status!==0)process.exit(prepareWake.status??1);
+
 const secret = process.env.ALEXA_OAUTH_CLIENT_SECRET;
 if (!secret) {
   console.error('Set ALEXA_OAUTH_CLIENT_SECRET under Cloudflare Settings > Builds > Variables and secrets.');
