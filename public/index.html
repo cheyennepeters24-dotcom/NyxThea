@@ -739,16 +739,23 @@ const NYXExperience={
        }
      };
    });
-   const name=await this.sayAndListen("Hello. I’m NYX. Before we begin, I’d like to know what to call you.");
-   if(!name){card.innerHTML='<h2>I lost the microphone.</h2><p>Tap below to try the spoken introduction again.</p><button id="nyxRestartVoice" class="primary">Try again</button>';document.getElementById("nyxRestartVoice").onclick=()=>this.onboard(edit);return}
+   const rawName=await this.sayAndListen("Hello. I’m NYX. Before we begin, I’d like to know what to call you.");
+   if(!rawName){card.innerHTML='<h2>I lost the microphone.</h2><p>Tap below to try the spoken introduction again.</p><button id="nyxRestartVoice" class="primary">Try again</button>';document.getElementById("nyxRestartVoice").onclick=()=>this.onboard(edit);return}
+   const cleanName=value=>{
+     let text=String(value||"").trim().replace(/[.!?]+$/,"");
+     text=text.replace(/^(?:hello[,.]?s*)?(?:my name is|i am|i'm|im|you can call me|call me|just call me|it's|its)s+/i,"").trim();
+     if(/s+iss+/i.test(text)&&/^mys+name/i.test(String(value||"")))text=text.split(/s+iss+/i).pop().trim();
+     return text.slice(0,80);
+   };
+   const name=cleanName(rawName)||String(rawName).trim().slice(0,80);
    await this.save({preferredName:name});await api("/api/household/identity",{method:"POST",body:JSON.stringify({preferredName:name})});
    await NYXVoice.say("Nice to meet you, "+name+".");
    let pronunciation=await this.sayAndListen("How would you like me to pronounce that? Say your name exactly the way you want me to say it.",{hint:"Say your name the way it should sound."});
-   pronunciation=pronunciation||name;
+   pronunciation=cleanName(pronunciation)||name;
    await this.save({pronunciation});await api("/api/household/identity",{method:"POST",body:JSON.stringify({pronunciation})});
    await NYXVoice.say("Let me try it. "+pronunciation+".");
    const confirmation=(await this.sayAndListen("Did I say that right? Say yes or no.",{hint:"Say yes or no."})).toLowerCase();
-   if(/^n/.test(confirmation)){const retry=await this.sayAndListen("Okay. Say it one more time, slowly, exactly how you want me to pronounce it.");if(retry){pronunciation=retry;await this.save({pronunciation});await api("/api/household/identity",{method:"POST",body:JSON.stringify({pronunciation})});await NYXVoice.say("Got it. "+pronunciation+".")}}
+   if(/^n/.test(confirmation)){const retry=await this.sayAndListen("Okay. Say it one more time, slowly, exactly how you want me to pronounce it.");if(retry){pronunciation=cleanName(retry)||pronunciation;await this.save({pronunciation});await api("/api/household/identity",{method:"POST",body:JSON.stringify({pronunciation})});await NYXVoice.say("Got it. "+pronunciation+".")}}
    const birthdaySpoken=await this.sayAndListen("When is your birthday? You can say something like July fourth nineteen ninety.",{hint:"Say your month, day, and year."});
    if(birthdaySpoken){const parsed=new Date(birthdaySpoken);if(!Number.isNaN(parsed.getTime())){const birthday=[parsed.getFullYear(),String(parsed.getMonth()+1).padStart(2,"0"),String(parsed.getDate()).padStart(2,"0")].join("-");try{await api("/api/household/identity",{method:"POST",body:JSON.stringify({birthday})})}catch{}}}
    card.innerHTML='<h2>How much should I speak up?</h2><div class="nyx-choice"><button data-p="quiet"><strong>Quiet</strong><br>I’m here when you ask.</button><button data-p="helpful"><strong>Helpful — Recommended</strong><br>I’ll speak up when something genuinely matters.</button><button data-p="engaged"><strong>Engaged</strong><br>Be involved. Notice things and suggest what’s next.</button></div>';
