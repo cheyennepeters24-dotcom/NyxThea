@@ -419,3 +419,13 @@ test('browser security policy permits blob-backed natural voice audio', async ()
   const response=await call('/');
   assert.match(response.headers.get('content-security-policy')||'',/media-src 'self' blob:/);
 });
+
+
+test('production host redirects HTTP to HTTPS and sends HSTS', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const redirect = await worker.fetch(new Request('http://nyxthea.thecrimsonbluerose.com/'), env);
+  assert.equal(redirect.status, 308);
+  assert.equal(redirect.headers.get('location'), 'https://nyxthea.thecrimsonbluerose.com/');
+  const secure = await worker.fetch(new Request('https://nyxthea.thecrimsonbluerose.com/'), env);
+  assert.equal(secure.headers.get('strict-transport-security'), 'max-age=31536000');
+});
