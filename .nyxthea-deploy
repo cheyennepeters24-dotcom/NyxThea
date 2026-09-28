@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: family-alpha-third-audit-clean
-Source commit: ac9b67f4bafb2aec37354d044865e964dcc66095
+Release: nyx-local-training-capture
+Source commit: c9ddd505756ac5ed351494e27ed47a274ffb1a5f
