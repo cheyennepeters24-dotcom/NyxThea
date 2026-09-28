@@ -716,7 +716,7 @@ const NYXExperience={
      typed.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();typedSubmit.click()}};
      setTimeout(begin,420);
    })
- }
+ },
  async onboard(edit=false){
    if(!credential){unlock();return}
    shut();NYXHandsFree.stop();const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
