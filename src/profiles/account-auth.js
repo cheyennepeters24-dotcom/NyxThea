@@ -8,12 +8,15 @@ const encoder = new TextEncoder();
 const cookieName = 'nyxthea_session';
 const day = 86400;
 const duration = 30 * day;
+const PBKDF2_ITERATIONS = 100000;
 const failure = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const hex = bytes => [...new Uint8Array(bytes)].map(n => n.toString(16).padStart(2, '0')).join('');
 async function digest(value) { return hex(await crypto.subtle.digest('SHA-256', encoder.encode(value))); }
-async function derive(password, salt) {
+async function derive(password, salt, iterations = PBKDF2_ITERATIONS) {
+  const count = Number(iterations);
+  if (!Number.isInteger(count) || count < 10000 || count > PBKDF2_ITERATIONS) failure('Stored password hash parameters are unsupported.', 409);
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: 210000, hash: 'SHA-256' }, key, 256));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: encoder.encode(salt), iterations: count, hash: 'SHA-256' }, key, 256));
 }
 function constantTimeEqual(a,b){const left=String(a||""),right=String(b||""),length=Math.max(left.length,right.length);let diff=left.length^right.length;for(let i=0;i<length;i++)diff|=(left.charCodeAt(i)||0)^(right.charCodeAt(i)||0);return diff===0;}
 const random = () => `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, '')}`;
@@ -33,7 +36,7 @@ export async function registerAccount({ username, password, displayName }) {
   const profile = createProfile({ displayName: display });
   profile.role = "adult";
   const recoveryCode = random();
-  accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, recoveryHash: await digest(recoveryCode), createdAt: now() });
+  accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, passwordHashIterations: PBKDF2_ITERATIONS, recoveryHash: await digest(recoveryCode), createdAt: now() });
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
 }
 export async function createProfileClaimInvite(profileId, createdBy, ttlMs = 7 * 86400000) {
@@ -54,7 +57,7 @@ export async function claimProfileAccount({ inviteCode, username, password }) {
   if (!profile) failure('Profile is unavailable.', 404);
   if ([...accounts().values()].some(account => account.profileId === profile.id)) failure('That profile already has a sign-in.', 409);
   const salt = random(), passwordHash = await derive(password, salt), recoveryCode = random();
-  accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, recoveryHash: await digest(recoveryCode), createdAt: now() });
+  accounts().set(name, { username: name, profileId: profile.id, salt, passwordHash, passwordHashIterations: PBKDF2_ITERATIONS, recoveryHash: await digest(recoveryCode), createdAt: now() });
   invite.usedAt = now(); claims().set(key, invite);
   return { profile: profileSummary(profile), token: await makeSession(profile.id), recoveryCode };
 }
@@ -62,7 +65,7 @@ export async function verifyAccountPassword(profileId, password) {
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
   const salt=record?.salt||"nyxthea-missing-account";
   const expected=record?.passwordHash||await digest("nyxthea-missing-password");
-  const actual=await derive(String(password||""),salt);
+  const actual=await derive(String(password||""),salt,record?.passwordHashIterations||PBKDF2_ITERATIONS);
   if(!record||!constantTimeEqual(actual,expected))failure("Password is incorrect.",401);
   return {ok:true};
 }
@@ -114,7 +117,7 @@ export async function completeEmailPasswordRecovery({username,code,newPassword})
   const actualCodeHash=await digest(String(code||"")),expectedCodeHash=record?.emailRecoveryCodeHash||await digest("nyxthea-missing-email-recovery");
   if(!record?.emailRecoveryCodeHash||record.emailRecoveryExpiresAt<=Date.now()||!constantTimeEqual(actualCodeHash,expectedCodeHash))failure("Email recovery code is invalid or expired.",401);
   const salt=random(),passwordHash=await derive(newPassword,salt),nextCode=random();
-  record.salt=salt;record.passwordHash=passwordHash;record.recoveryHash=await digest(nextCode);
+  record.salt=salt;record.passwordHash=passwordHash;record.passwordHashIterations=PBKDF2_ITERATIONS;record.recoveryHash=await digest(nextCode);
   delete record.emailRecoveryCodeHash;delete record.emailRecoveryExpiresAt;
   for(const [key,session] of sessions())if(session.profileId===record.profileId)sessions().delete(key);
   for(const [key,alexaToken] of table('alexa_oauth_tokens'))if(alexaToken.profileId===record.profileId)table('alexa_oauth_tokens').delete(key);
@@ -126,7 +129,7 @@ export async function changeAccountPassword(profileId,{currentPassword,newPasswo
   const record=[...accounts().values()].find(account=>account.profileId===profileId);
   if(!record)failure("Account not found.",404);
   const salt=random();
-  record.salt=salt;record.passwordHash=await derive(newPassword,salt);
+  record.salt=salt;record.passwordHash=await derive(newPassword,salt);record.passwordHashIterations=PBKDF2_ITERATIONS;
   for(const [key,session] of sessions())if(session.profileId===profileId)sessions().delete(key);
   for(const [key,alexaToken] of table('alexa_oauth_tokens'))if(alexaToken.profileId===profileId)table('alexa_oauth_tokens').delete(key);
   return {ok:true,token:await makeSession(profileId)};
@@ -138,7 +141,7 @@ export async function loginAccount({ username, password }) {
   // Always run the derivation so missing usernames do not have a noticeably cheaper path.
   const salt = record?.salt || 'nyxthea-missing-account';
   const expected = record?.passwordHash || await digest('nyxthea-missing-password');
-  const actual = await derive(String(password || ''), salt);
+  const actual = await derive(String(password || ''), salt, record?.passwordHashIterations || PBKDF2_ITERATIONS);
   if (!record || !constantTimeEqual(actual, expected)) failure('Username or password is incorrect.', 401);
   const profile = profileById(record.profileId);
   if (!profile) failure('Account profile is unavailable.', 503);
@@ -200,7 +203,7 @@ export async function recoverAccount({ username, recoveryCode, newPassword }) {
   const actual = await digest(String(recoveryCode || '')), expected = record?.recoveryHash || await digest('nyxthea-missing-recovery-code');
   if (!record || !record.recoveryHash || !constantTimeEqual(expected, actual)) failure('Recovery details are incorrect.', 401);
   const salt = random(), passwordHash = await derive(newPassword, salt), nextCode = random();
-  record.salt = salt; record.passwordHash = passwordHash; record.recoveryHash = await digest(nextCode);
+  record.salt = salt; record.passwordHash = passwordHash; record.passwordHashIterations = PBKDF2_ITERATIONS; record.recoveryHash = await digest(nextCode);
   for (const [key, session] of sessions()) if (session.profileId === record.profileId) sessions().delete(key);
   for (const [key, alexaToken] of table('alexa_oauth_tokens')) if (alexaToken.profileId === record.profileId) table('alexa_oauth_tokens').delete(key);
   const profile = profileById(record.profileId);
