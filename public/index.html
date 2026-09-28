@@ -210,7 +210,7 @@ async function accountSettings(){
  <div class="item"><strong>Security setup</strong><p class="small">${lockInfo?.lock?.pinEnabled?"PIN is set. You can change it here.":"No PIN yet. Create one now, or keep using your account password."}</p><input id="newProfilePinInline" class="field" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" placeholder="4–8 digit PIN"><button id="saveProfilePinInline" class="primary">${lockInfo?.lock?.pinEnabled?"Change PIN":"Create PIN"}</button><button id="enableBiometricInline" class="secondary">Enable Face ID / Touch ID / passkey</button><p id="securityNote" class="small"></p></div>
  <div class="item"><strong>Change account password</strong><input id="currentAccountPassword" class="field" type="password" autocomplete="current-password" placeholder="Current password"><input id="newAccountPassword" class="field" type="password" autocomplete="new-password" placeholder="New password — at least 12 characters"><button id="changeAccountPassword" class="secondary">Change password</button><p id="passwordNote" class="small"></p></div>
  <div class="item"><strong>Your interface</strong><p class="small">Choose what Nyx puts on your dashboard. A module can be visible even before its external provider is connected.</p><div class="nyx-choice">${moduleChoices}</div><button id="saveInterfaceModules" class="primary">Save my interface</button><p id="interfaceNote" class="small"></p></div>
- <div class="item"><strong>Voice activation</strong><label class="choice"><input id="voiceEnabled" type="checkbox" ${NYXExperience.settings?.voiceEnabled!==false?"checked":""}> Allow voice interaction</label><label class="choice"><input id="handsFreeEnabled" type="checkbox" ${NYXExperience.settings?.handsFreeEnabled?"checked":""}> Wake by <strong>Nyx</strong> while this page is open</label><p class="small">NyxThea and Nixie are conversational names; the wake word is always Nyx.</p><p class="small">${NYXExperience.wakeEnrollmentReady()?"Nyx is taught on this device.":"This device still needs the 5-sample Nyx setup."}</p><button id="teachNyx" class="secondary">${NYXExperience.wakeEnrollmentReady()?"Re-teach Nyx on this device":"Teach Nyx my voice"}</button><p id="voiceNote" class="small"></p></div>
+ <div class="item"><strong>Voice activation</strong><label class="choice"><input id="voiceEnabled" type="checkbox" ${NYXExperience.settings?.voiceEnabled!==false?"checked":""}> Allow voice interaction</label><label class="choice"><input id="handsFreeEnabled" type="checkbox" ${NYXExperience.settings?.handsFreeEnabled?"checked":""}> Wake by <strong>Nyx</strong> while this page is open</label><p class="small">NyxThea and Nixie are conversational names; the wake word is always Nyx.</p><p class="small">${NYXExperience.wakeEnrollmentReady()?"Nyx is taught on this device.":"This device still needs the 5-sample Nyx setup."}</p><button id="teachNyx" class="secondary">${NYXExperience.wakeEnrollmentReady()?"Re-teach Nyx on this device":"Teach Nyx my voice"}</button><button id="exportNyxSamples" class="secondary">Export Nyx training samples</button><button id="clearNyxSamples" class="secondary">Delete local Nyx training samples</button><p id="wakeSampleNote" class="small">Checking local samples…</p><p id="voiceNote" class="small"></p></div>
  <div class="item"><strong>Interface sounds</strong><select id="soundMode" class="field"><option value="off">Off</option><option value="minimal">Minimal</option><option value="full">Full</option></select><label class="choice"><input id="decorativeSounds" type="checkbox"> Allow decorative interface sounds</label><button id="testSound" class="secondary">Preview Nyx sound</button><p id="soundNote" class="small"></p></div>
  <div class="item"><strong>Recovery email</strong><input id="recoveryEmail" class="field" type="email" placeholder="Recovery email"><button id="sendRecoveryVerify" class="secondary">Send verification code</button><input id="recoveryEmailCode" class="field" inputmode="numeric" maxlength="6" placeholder="6-digit verification code"><button id="confirmRecoveryEmail" class="secondary">Verify recovery email</button><button id="reverifyRecoveryEmail" class="secondary" style="display:none">Verify adult access again</button><p id="recoveryEmailNote" class="small"></p></div><button id="signOut" class="secondary">Sign out</button>`);
  $("#nameSettings").onclick=()=>NYXExperience.onboard(true);$("#meetPerson").onclick=meetSomeoneNew;$("#chooseSpeaker").onclick=chooseHouseholdSpeaker;
@@ -222,6 +222,9 @@ async function accountSettings(){
  $("#saveInterfaceModules").onclick=async()=>{const visible=$$("[data-module-choice]:checked").map(x=>x.dataset.moduleChoice);try{await NYXExperience.save({visibleModules:visible});applyInterfacePreferences();$("#interfaceNote").textContent="Your interface is updated."}catch(e){$("#interfaceNote").textContent=e.message}};
  $("#voiceEnabled").onchange=async e=>{try{await NYXExperience.save({voiceEnabled:e.target.checked});if(!e.target.checked){NYXHandsFree.stop();NYXVoice.stop()}$("#voiceNote").textContent="Voice preference saved."}catch(err){$("#voiceNote").textContent=err.message}};
  $("#teachNyx").onclick=async()=>{const ok=await NYXExperience.enrollWakeWord({returnToSettings:true});if(ok)$("#voiceNote").textContent="Nyx is ready on this device."};
+ void NYXWakeTraining.count().then(count=>{const note=$("#wakeSampleNote");if(note)note.textContent=count?`${count} local Nyx training sample${count===1?"":"s"} stored on this device.`:"No local Nyx training samples stored yet."});
+ $("#exportNyxSamples").onclick=async()=>{const note=$("#wakeSampleNote");try{const count=await NYXWakeTraining.count();if(!count){note.textContent="There are no local Nyx samples to export yet.";return}await NYXWakeTraining.export();note.textContent=`Exported ${count} local Nyx training samples.`}catch(e){note.textContent=e.message}};
+ $("#clearNyxSamples").onclick=async()=>{const note=$("#wakeSampleNote");try{await NYXWakeTraining.clear();note.textContent="Local Nyx training samples deleted from this device."}catch(e){note.textContent=e.message}};
  $("#handsFreeEnabled").onchange=async e=>{const note=$("#voiceNote");if(e.target.checked&&!NYXExperience.wakeEnrollmentReady()){note.textContent="Teach Nyx your voice first.";const ok=await NYXExperience.enrollWakeWord({returnToSettings:true});if(!ok){e.target.checked=false;return}}if(e.target.checked)NYXHandsFree.start();else NYXHandsFree.stop();try{await NYXExperience.save({handsFreeEnabled:e.target.checked,handsFreeConfigured:true});note.textContent=e.target.checked?"Wake-by-Nyx saved.":"Wake-by-Nyx turned off."}catch(err){note.textContent=err.message}};
  
  const soundMode=$("#soundMode"),decorative=$("#decorativeSounds"),soundNote=$("#soundNote");soundMode.value=NYXExperience.settings?.soundMode||"minimal";decorative.checked=NYXExperience.settings?.decorativeSounds!==false;soundMode.onchange=async()=>{try{await NYXExperience.save({soundMode:soundMode.value});soundNote.textContent="Sound mode saved."}catch(e){soundNote.textContent=e.message}};decorative.onchange=async()=>{try{await NYXExperience.save({decorativeSounds:decorative.checked});soundNote.textContent="Sound preference saved."}catch(e){soundNote.textContent=e.message}};$("#testSound").onclick=async()=>{await NYXSound.prime();NYXSound.cue("startup")};
@@ -525,6 +528,16 @@ async function nyxPrimeFirstRun(){
 }
 
 let nyxStartupAudioCache=null;
+const NYXWakeTraining={
+  module:null,
+  async load(){if(!this.module)this.module=await import("./nyx-wake-training.js");return this.module},
+  async count(){try{return (await (await this.load()).listWakeTrainingSamples({profileId:credential?.id,deviceId:nyxDeviceId()})).length}catch{return 0}},
+  async clear(){return (await this.load()).clearWakeTrainingSamples({profileId:credential?.id,deviceId:nyxDeviceId()})},
+  async export(){return (await this.load()).exportWakeTrainingBundle({profileId:credential?.id,deviceId:nyxDeviceId(),download:true})},
+  async save(blob,meta={}){return (await this.load()).saveWakeTrainingSample({profileId:credential?.id,deviceId:nyxDeviceId(),blob,mimeType:blob.type,...meta})}
+};
+window.NYXWakeTraining=NYXWakeTraining;
+
 function nyxStartupAudio(){
   if(nyxStartupAudioCache)return nyxStartupAudioCache;
   const rate=22050,segments=[{f:262,d:.22},{f:392,d:.24},{f:659,d:.34}],gap=.045,total=segments.reduce((n,x)=>n+x.d,0)+gap*(segments.length-1),samples=Math.ceil(total*rate),bytes=new ArrayBuffer(44+samples*2),view=new DataView(bytes);
@@ -546,20 +559,48 @@ const NYXExperience={
    wakeEnrollments[deviceId]={complete:complete===true,samples:Number(samples)||0,version:1,updatedAt};
    await this.save({wakeEnrollments,wakeEnrollmentComplete:complete===true,wakeEnrollmentSamples:Number(samples)||0,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:deviceId,wakeEnrollmentUpdatedAt:updatedAt,handsFreeConfigured:true});
  },
+ async captureWakeSample(promptKind,promptText){
+   const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");
+   card.innerHTML=`<h2>${esc(promptText)}</h2><div style="display:grid;place-items:center;padding:24px 0"><div class="nyx-voice-orb" style="width:92px;height:92px;border-radius:50%;border:1px solid #83d0ff88;box-shadow:0 0 34px #287cff66,inset 0 0 24px #1b59b855;display:grid;place-items:center;font-size:1.8rem">◉</div></div><p id="nyxWakeCaptureStatus" class="small" style="text-align:center">Get ready…</p>`;
+   await NYXVoice.say(promptText);
+   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)throw new Error("This browser cannot capture wake-training audio.");
+   const stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),5500,"Microphone permission timed out.");
+   const type=["audio/mp4","audio/webm","audio/ogg"].find(t=>MediaRecorder.isTypeSupported(t));
+   const recorder=type?new MediaRecorder(stream,{mimeType:type}):new MediaRecorder(stream),chunks=[];
+   const status=document.getElementById("nyxWakeCaptureStatus");
+   recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
+   const stopped=new Promise(resolve=>recorder.onstop=resolve);
+   status.textContent="Say “Nyx” now.";this.state("listening");recorder.start();
+   await nyxDelay(1800);try{if(recorder.state!=="inactive")recorder.stop()}catch{}
+   await stopped;stream.getTracks().forEach(t=>t.stop());this.state("idle");
+   const blob=new Blob(chunks,{type:recorder.mimeType||"audio/mp4"});if(blob.size<180)throw new Error("I didn’t capture enough audio.");
+   const audio=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(",")[1]);reader.onerror=()=>reject(Error("Could not read wake sample."));reader.readAsDataURL(blob)});
+   status.textContent="Checking that sample…";
+   const result=await api("/api/voice/transcribe",{method:"POST",timeoutMs:7000,body:JSON.stringify({audio,type:blob.type.split(";")[0]||"audio/mp4"})});
+   const transcript=String(result.text||"").trim(),normalized=transcript.toLowerCase().replace(/[^a-z]/g,"");
+   const accepted=["nyx","nix","nicks"].includes(normalized);
+   if(accepted)await NYXWakeTraining.save(blob,{label:"positive",promptKind,transcript});
+   return {accepted,transcript,blob};
+ },
  async enrollWakeWord({returnToSettings=false}={}){
    if(!credential)return false;
    NYXHandsFree.stop();NYXVoice.stopSpeech();
    const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
-   const prompts=["Say Nyx in your normal voice.","Say Nyx a little softer.","Say Nyx a little louder.","Say Nyx naturally, like you’re getting my attention.","One more time. Say Nyx."];
+   card.innerHTML='<h2>Teach me how you say Nyx</h2><p>I’ll record five short wake-word samples and keep the accepted clips only in this browser on this device for Nyx wake-model training. During setup, each clip is temporarily sent through NyxThea transcription only to confirm that it says “Nyx”; the raw clip is not stored on the server.</p><button id="beginWakeSamples" class="primary">Record my five Nyx samples</button><button id="cancelWakeSamples" class="secondary">Not now</button>';
+   const consent=await new Promise(resolve=>{document.getElementById("beginWakeSamples").onclick=()=>resolve(true);document.getElementById("cancelWakeSamples").onclick=()=>resolve(false)});
+   if(!consent){host.classList.remove("show");if(returnToSettings)void accountSettings();return false}
+   const prompts=[["normal","Say Nyx in your normal voice."],["soft","Say Nyx a little softer."],["loud","Say Nyx a little louder."],["attention","Say Nyx naturally, like you’re getting my attention."],["final","One more time. Say Nyx."]];
    let completed=0;
-   const normalize=value=>String(value||"").toLowerCase().replace(/[^a-z]/g,"");
    for(let i=0;i<prompts.length;i++){
      let accepted=false,tries=0;
      while(!accepted&&tries<3){
        tries++;
-       const heard=await this.sayAndListen(prompts[i],{hint:`Sample ${i+1} of 5 · Say only “Nyx”`,timeout:9000,allowTyped:false});
-       const normalized=normalize(heard);
-       accepted=["nyx","nix","nicks"].includes(normalized);
+       try{
+         const sample=await this.captureWakeSample(prompts[i][0],prompts[i][1]);
+         accepted=sample.accepted;
+       }catch(error){
+         card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(error.message||"Wake sample capture failed.")}</p>`);
+       }
        if(!accepted){
          card.insertAdjacentHTML("beforeend",'<p class="small" role="alert">I didn’t hear “Nyx” clearly enough. Try that sample again.</p>');
          await nyxDelay(500);
