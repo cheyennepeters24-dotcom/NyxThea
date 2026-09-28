@@ -655,26 +655,68 @@ const NYXExperience={
    card.innerHTML=`<h2>${esc(prompt)}</h2><div style="display:grid;place-items:center;padding:26px 0"><div class="nyx-voice-orb" style="width:92px;height:92px;border-radius:50%;border:1px solid #83d0ff88;box-shadow:0 0 34px #287cff66, inset 0 0 24px #1b59b855;display:grid;place-items:center;font-size:1.8rem">◉</div></div><p id="nyxVoiceStatus" class="small" style="text-align:center">${esc(hint)}</p><button id="nyxVoiceRetry" class="secondary" hidden>Tap once to answer</button><input id="nyxVoiceTyped" class="field" hidden placeholder="Type your answer instead"><button id="nyxVoiceTypedSubmit" class="secondary" hidden>Continue with typed answer</button>`;
    await NYXVoice.say(prompt);
    return new Promise(resolve=>{
-     const SR=window.SpeechRecognition||window.webkitSpeechRecognition,status=document.getElementById("nyxVoiceStatus"),retry=document.getElementById("nyxVoiceRetry"),typed=document.getElementById("nyxVoiceTyped"),typedSubmit=document.getElementById("nyxVoiceTypedSubmit");
-     let finished=false,timer=null,recognition=null,attempts=0,retrying=false;
-     const done=value=>{if(finished)return;finished=true;clearTimeout(timer);try{recognition?.abort()}catch{}this.state("idle");resolve(String(value||"").trim())};
-     const miss=async message=>{if(finished||retrying)return;retrying=true;clearTimeout(timer);try{recognition?.abort()}catch{}recognition=null;this.state("idle");attempts++;if(attempts<=2){status.textContent=message||"I didn’t catch that.";await NYXVoice.say("I didn’t catch that. Say that again for me.");retrying=false;setTimeout(begin,320)}else{status.textContent="I’m having trouble hearing you over the background noise. Tap once and try again.";retry.hidden=false;retrying=false}};
+     const status=document.getElementById("nyxVoiceStatus"),retry=document.getElementById("nyxVoiceRetry"),typed=document.getElementById("nyxVoiceTyped"),typedSubmit=document.getElementById("nyxVoiceTypedSubmit");
+     let finished=false,timer=null,attempts=0,retrying=false,stream=null,recorder=null,recognition=null;
+     const cleanup=()=>{clearTimeout(timer);timer=null;try{if(recorder&&recorder.state!=="inactive")recorder.stop()}catch{}recorder=null;try{recognition?.abort()}catch{}recognition=null;try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null;this.state("idle")};
+     const done=value=>{if(finished)return;finished=true;cleanup();resolve(String(value||"").trim())};
+     const showTyped=message=>{cleanup();status.textContent=message||"You can type this answer instead.";retry.hidden=true;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false;typed.focus()}else done("")};
+     const miss=async message=>{if(finished||retrying)return;retrying=true;cleanup();attempts++;if(attempts<=2){status.textContent=message||"I didn’t catch that.";await NYXVoice.say("I didn’t catch that. Say that again for me.");retrying=false;setTimeout(begin,380)}else{status.textContent="I’m having trouble hearing you. Tap once and try again, or type your answer.";retry.hidden=false;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false}}};
+     const transcribeBlob=async blob=>{
+       if(blob.size<100)throw new Error("No speech was captured.");
+       if(blob.size>1000000)throw new Error("Recording was too large.");
+       const audio=await new Promise((resolveAudio,reject)=>{const reader=new FileReader();reader.onload=()=>resolveAudio(String(reader.result).split(",")[1]);reader.onerror=()=>reject(Error("Could not read the recording."));reader.readAsDataURL(blob)});
+       const result=await api("/api/voice/transcribe",{method:"POST",timeoutMs:7000,body:JSON.stringify({audio,type:blob.type.split(";")[0]||"audio/mp4"})});
+       return String(result.text||"").trim();
+     };
+     const beginMedia=async()=>{
+       try{
+         stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),5500,"Microphone permission timed out.");
+         if(finished){stream.getTracks().forEach(t=>t.stop());return}
+         const type=["audio/mp4","audio/webm","audio/ogg"].find(t=>MediaRecorder.isTypeSupported(t));
+         recorder=type?new MediaRecorder(stream,{mimeType:type}):new MediaRecorder(stream);
+         const chunks=[];recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
+         recorder.onstart=()=>{status.textContent="Listening…";this.state("listening")};
+         recorder.onerror=()=>void miss("I couldn’t use the microphone.");
+         recorder.onstop=async()=>{
+           const localStream=stream;stream=null;try{localStream?.getTracks().forEach(t=>t.stop())}catch{}
+           const localRecorder=recorder;recorder=null;
+           if(finished||retrying)return;
+           this.state("thinking");status.textContent="Listening back…";
+           try{
+             const blob=new Blob(chunks,{type:localRecorder?.mimeType||type||"audio/mp4"}),text=await transcribeBlob(blob);
+             if(text)done(text);else await miss("I didn’t catch that.")
+           }catch(error){await miss(error?.message||"I didn’t catch that.")}
+         };
+         recorder.start();
+         timer=setTimeout(()=>{try{if(recorder?.state!=="inactive")recorder.stop()}catch{}},Math.min(6500,Math.max(3000,timeout-1500)));
+       }catch(error){
+         if(error?.name==="NotAllowedError"){showTyped("Microphone access is blocked. You can type this answer instead.");return}
+         await miss(error?.message||"I couldn’t start the microphone.")
+       }
+     };
+     const beginSpeech=()=>{
+       const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+       if(!SR){showTyped("Voice recognition isn’t available here.");return}
+       try{
+         recognition=new SR();recognition.lang="en-US";recognition.continuous=false;recognition.interimResults=false;recognition.maxAlternatives=1;
+         recognition.onstart=()=>{status.textContent="Listening…";this.state("listening")};
+         recognition.onresult=e=>{const text=e.results?.[0]?.[0]?.transcript?.trim()||"";if(text)done(text);else void miss("I didn’t catch that.")};
+         recognition.onerror=e=>{if(["not-allowed","service-not-allowed"].includes(e.error))showTyped("Microphone recognition is blocked. You can type this answer instead.");else void miss("I didn’t catch that.")};
+         recognition.onend=()=>{if(!finished&&!retrying&&recognition){recognition=null;void miss("I didn’t catch that.")}};
+         recognition.start();timer=setTimeout(()=>void miss("I didn’t catch that."),timeout)
+       }catch{showTyped("Voice recognition isn’t available here. You can type this answer instead.")}
+     };
      const begin=()=>{
        if(finished||retrying)return;
-       if(!SR){status.textContent=allowTyped?"Voice recognition isn’t available here. You can type this answer instead.":"Voice recognition isn’t available here, so Nyx wake setup can’t be completed on this browser.";retry.hidden=true;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false;typed.focus()}else{done("")}return}
-       try{
-         recognition=new SR();recognition.lang="en-US";recognition.continuous=false;recognition.interimResults=false;recognition.maxAlternatives=3;
-         recognition.onstart=()=>{status.textContent="Listening…";this.state("listening")};
-         recognition.onresult=e=>{const heard=e.results?.[0]?.[0],text=heard?.transcript?.trim()||"",conf=Number(heard?.confidence);if(!text||(Number.isFinite(conf)&&conf>0&&conf<.42)){miss("I didn’t catch that clearly.");return}done(text)};
-         recognition.onerror=e=>{if(["not-allowed","service-not-allowed"].includes(e.error)){this.state("idle");status.textContent=allowTyped?"Microphone recognition is blocked. You can tap to retry or type this answer.":"Microphone recognition is blocked. Nyx wake setup needs microphone recognition.";retry.hidden=false;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false}}else miss("I didn’t catch that.")};
-         recognition.onend=()=>{if(recognition){recognition=null}if(!finished&&!retrying)miss("I didn’t catch that.")};
-         recognition.start();timer=setTimeout(()=>miss("I didn’t catch that."),timeout);
-       }catch{status.textContent="Tap once so I can listen.";retry.hidden=false}
+       cleanup();
+       if(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder)void beginMedia();else beginSpeech()
      };
-     retry.onclick=async()=>{retry.hidden=true;attempts=0;try{const promise=navigator.mediaDevices?.getUserMedia?.({audio:true,video:false});if(promise){const stream=await nyxMediaRequest(promise,5500,"Microphone permission timed out.");stream?.getTracks().forEach(t=>t.stop())}}catch{}begin()};typedSubmit.onclick=()=>{const value=typed.value.trim();if(value)done(value)};typed.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();typedSubmit.click()}};
-     setTimeout(begin,320);
+     retry.onclick=()=>{retry.hidden=true;typed.hidden=true;typedSubmit.hidden=true;attempts=0;begin()};
+     typedSubmit.onclick=()=>{const value=typed.value.trim();if(value)done(value)};
+     typed.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();typedSubmit.click()}};
+     setTimeout(begin,420);
    })
- },
+ }
  async onboard(edit=false){
    if(!credential){unlock();return}
    shut();NYXHandsFree.stop();const host=document.getElementById("nyxOnboard"),card=document.getElementById("nyxOnboardCard");host.classList.add("show");
