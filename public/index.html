@@ -306,11 +306,62 @@ const NYXVoice={
 if(window.speechSynthesis){speechSynthesis.onvoiceschanged=()=>NYXVoice.choose();NYXVoice.choose()}
 window.NYXVoice=NYXVoice;
 
+const NYXLocalWake={
+ detector:null,module:null,loading:null,active:false,lastError:null,
+ async loadOrt(){
+   if(window.ort?.InferenceSession)return window.ort;
+   if(document.querySelector('script[data-nyx-ort]')){
+     for(let i=0;i<20&&!window.ort?.InferenceSession;i++)await nyxDelay(100);
+     return window.ort||null;
+   }
+   return await new Promise(resolve=>{
+     const script=document.createElement("script");script.src="/vendor/ort.min.js";script.async=true;script.dataset.nyxOrt="true";
+     script.onload=()=>resolve(window.ort||null);script.onerror=()=>resolve(null);document.head.appendChild(script)
+   })
+ },
+ async ensure(){
+   if(this.detector)return true;
+   if(this.loading)return this.loading;
+   this.loading=(async()=>{
+     try{
+       const ort=await this.loadOrt();if(!ort)return false;
+       this.module=this.module||await import("./nyx-wake-detector.js");
+       this.detector=new this.module.NyxOnnxWakeDetector({
+         ort,
+         onWake:async detail=>{
+           if(!NYXHandsFree.active||NYXHandsFree.paused||NYXHandsFree.turnBusy)return;
+           await NYXHandsFree.heard("Nyx",1);
+         },
+         onError:error=>{this.lastError=error}
+       });
+       await this.detector.init();return true;
+     }catch(error){this.lastError=error;this.detector=null;return false}
+     finally{this.loading=null}
+   })();
+   return this.loading
+ },
+ async start(stream){
+   if(!stream)return false;
+   if(!await this.ensure())return false;
+   try{await this.detector.start(stream);this.active=true;return true}catch(error){this.lastError=error;this.active=false;return false}
+ },
+ async stop(){this.active=false;try{await this.detector?.stop({stopTracks:false})}catch{}},
+ async release(){this.active=false;try{await this.detector?.release()}catch{}this.detector=null}
+};
+window.NYXLocalWake=NYXLocalWake;
+
 // Foreground-only, explicitly enabled for this profile. The browser's speech
 // recognizer may process audio; NyxThea sends only addressed turns to its API.
 const NYXHandsFree={
  active:false,paused:false,stream:null,recorder:null,timer:null,wakeInFlight:0,wakeAborts:new Set(),turnBusy:false,engagedUntil:0,failures:0,generation:0,recognition:null,persistentStream:false,speakerProfileId:null,speakerName:null,
  label(message){const b=document.getElementById("wakeToggle");b.textContent=this.active?"Stop voice activation":"Enable voice activation";b.setAttribute("aria-pressed",String(this.active));const speaker=this.speakerName?" · "+this.speakerName:"";if(message)state(this.active?"listening":"ready",message+speaker)},
+ async activateWakeMode(){
+   if(!this.active||this.paused||document.hidden||!this.stream)return;
+   const engaged=Date.now()<this.engagedUntil;
+   if(!engaged&&await NYXLocalWake.start(this.stream)){this.label("Listening for Nyx");return}
+   await NYXLocalWake.stop();
+   this.recordChunk()
+ },
  async start(){
    if(this.active)return;
    if(!credential){unlock();return}
@@ -325,9 +376,9 @@ const NYXHandsFree={
    this.active=true;this.paused=false;this.failures=0;this.engagedUntil=0;this.generation++;
    this.stream=stream;this.persistentStream=true;
    this.label("Listening for Nyx");
-   this.recordChunk();
+   await this.activateWakeMode();
  },
- stop(message="Voice activation off"){NYXSound.forceSession=false;this.persistentStream=false;for(const c of this.wakeAborts){try{c.abort()}catch{}}this.wakeAborts.clear();this.wakeInFlight=0;
+ stop(message="Voice activation off"){NYXSound.forceSession=false;void NYXLocalWake.stop();this.persistentStream=false;for(const c of this.wakeAborts){try{c.abort()}catch{}}this.wakeAborts.clear();this.wakeInFlight=0;
    const wasActive=this.active;this.active=false;this.paused=false;this.turnBusy=false;this.speakerProfileId=null;this.speakerName=null;this.engagedUntil=0;this.generation++;
    clearTimeout(this.timer);this.timer=null;
    try{if(this.recorder&&this.recorder.state!=="inactive")this.recorder.stop()}catch{}
@@ -339,7 +390,7 @@ const NYXHandsFree={
  disable(){this.stop();NYXExperience.save({handsFreeEnabled:false,voiceAssistantMode:false}).catch(()=>{})},
  pause(){
    if(!this.active)return;
-   this.paused=true;clearTimeout(this.timer);this.timer=null;for(const c of this.wakeAborts){try{c.abort()}catch{}}this.wakeAborts.clear();this.wakeInFlight=0;
+   this.paused=true;void NYXLocalWake.stop();clearTimeout(this.timer);this.timer=null;for(const c of this.wakeAborts){try{c.abort()}catch{}}this.wakeAborts.clear();this.wakeInFlight=0;
    try{if(this.recorder&&this.recorder.state!=="inactive")this.recorder.stop()}catch{}
    this.recorder=null;try{this.recognition?.abort()}catch{}this.recognition=null;
    if(!this.persistentStream){try{this.stream?.getTracks().forEach(t=>t.stop())}catch{}this.stream=null}
@@ -349,7 +400,7 @@ const NYXHandsFree={
    if(!this.active||!this.paused||document.hidden||guideSession)return;
    if(this.engagedUntil>Date.now())this.engagedUntil=Date.now()+45000;
    this.paused=false;this.label("Listening for Nyx");
-   setTimeout(()=>{if(this.persistentStream&&this.stream)this.recordChunk();else this.open()},260)
+   setTimeout(()=>{if(this.persistentStream&&this.stream)void this.activateWakeMode();else this.open()},260)
  },
  async open(){
    if(!this.active||this.paused||document.hidden||this.stream||this.recorder||this.recognition)return;
@@ -357,7 +408,7 @@ const NYXHandsFree={
      try{
        const stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),7000,"Microphone permission timed out.");
        if(!this.active||this.paused||document.hidden){stream.getTracks().forEach(t=>t.stop());return}
-       this.stream=stream;this.persistentStream=true;this.failures=0;this.recordChunk();return
+       this.stream=stream;this.persistentStream=true;this.failures=0;await this.activateWakeMode();return
      }catch(e){
        this.stream=null;this.persistentStream=false;
        if(e?.name==="NotAllowedError"){this.label("Microphone permission is needed for Nyx");return}
@@ -369,6 +420,7 @@ const NYXHandsFree={
  },
  recordChunk(){
    if(!this.active||this.paused||!this.stream||this.recorder||document.hidden)return;
+   if(NYXLocalWake.active)void NYXLocalWake.stop();
    try{
      const type=["audio/mp4","audio/webm","audio/ogg"].find(t=>MediaRecorder.isTypeSupported(t));
      const recorder=type?new MediaRecorder(this.stream,{mimeType:type}):new MediaRecorder(this.stream);
