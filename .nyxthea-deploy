@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: force-https-and-hsts
-Source commit: pending-main-head
+Release: cloudflare-pbkdf2-compat
+Source commit: 32cecba2f668cd52ed87f085693df78c06d2f948
