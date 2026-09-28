@@ -6,6 +6,10 @@
     "test": "node --test src/tests/*.test.js",
     "check": "node --check _worker.js",
     "check:ui": "node scripts/check-ui.mjs",
-    "check:source": "find src scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | xargs -0 -n1 node --check"
+    "check:source": "find src scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | xargs -0 -n1 node --check",
+    "prepare:wake": "node scripts/prepare-wake-runtime.mjs"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.29.0"
   }
 }
