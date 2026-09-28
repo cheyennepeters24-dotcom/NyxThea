@@ -531,12 +531,18 @@ function nyxStartupAudio(){
 }
 const NYXExperience={
  settings:null,
- async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:false,wakeEnrollmentComplete:false,wakeEnrollmentSamples:0,wakeEnrollmentVersion:0,wakeEnrollmentDeviceId:null,soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
+ async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:false,wakeEnrollmentComplete:false,wakeEnrollmentSamples:0,wakeEnrollmentVersion:0,wakeEnrollmentDeviceId:null,wakeEnrollments:{},soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
  async save(patch){try{const d=await api("/api/experience",{method:"POST",body:JSON.stringify(patch)});this.settings=d.settings}catch(e){const card=document.getElementById("nyxOnboardCard");if(card)card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(e.message)}. Please try again.</p>`);throw e}},
  state(value){document.body.dataset.nyxState=value;document.querySelector(".living-rose")?.classList.toggle("listening",value==="listening");document.querySelector(".living-rose")?.classList.toggle("speaking",value==="speaking")},
  needsOnboarding(){return Number(this.settings?.onboardingVersion||0)<2},
  voiceSessionEnabled(){return this.settings?.voiceEnabled!==false&&this.settings?.handsFreeEnabled===true&&this.settings?.voiceAssistantMode!==false},
- wakeEnrollmentReady(){return this.settings?.wakeEnrollmentComplete===true&&Number(this.settings?.wakeEnrollmentVersion||0)>=1&&this.settings?.wakeEnrollmentDeviceId===nyxDeviceId()&&Number(this.settings?.wakeEnrollmentSamples||0)>=5},
+ wakeEnrollmentRecord(){const id=nyxDeviceId(),record=this.settings?.wakeEnrollments?.[id];if(record)return record;if(this.settings?.wakeEnrollmentDeviceId===id)return {complete:this.settings?.wakeEnrollmentComplete===true,samples:Number(this.settings?.wakeEnrollmentSamples||0),version:Number(this.settings?.wakeEnrollmentVersion||0),updatedAt:this.settings?.wakeEnrollmentUpdatedAt||null};return null},
+ wakeEnrollmentReady(){const record=this.wakeEnrollmentRecord();return record?.complete===true&&Number(record?.version||0)>=1&&Number(record?.samples||0)>=5},
+ async saveWakeEnrollment({complete,samples}){
+   const deviceId=nyxDeviceId(),wakeEnrollments={...(this.settings?.wakeEnrollments||{})},updatedAt=new Date().toISOString();
+   wakeEnrollments[deviceId]={complete:complete===true,samples:Number(samples)||0,version:1,updatedAt};
+   await this.save({wakeEnrollments,wakeEnrollmentComplete:complete===true,wakeEnrollmentSamples:Number(samples)||0,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:deviceId,wakeEnrollmentUpdatedAt:updatedAt,handsFreeConfigured:true});
+ },
  async enrollWakeWord({returnToSettings=false}={}){
    if(!credential)return false;
    NYXHandsFree.stop();NYXVoice.stopSpeech();
@@ -557,14 +563,14 @@ const NYXExperience={
        }
      }
      if(!accepted){
-       await this.save({wakeEnrollmentComplete:false,wakeEnrollmentSamples:completed,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:nyxDeviceId(),wakeEnrollmentUpdatedAt:new Date().toISOString(),handsFreeEnabled:false,handsFreeConfigured:true});
+       await this.saveWakeEnrollment({complete:false,samples:completed});await this.save({handsFreeEnabled:false});
        card.innerHTML='<h2>Nyx setup paused</h2><p>I couldn’t confirm all five samples. Hands-free wake stays off, but you can still use tap-to-talk and text.</p><button id="retryWakeEnrollment" class="primary">Try Nyx setup again</button><button id="leaveWakeEnrollment" class="secondary">Not now</button>';
        return await new Promise(resolve=>{document.getElementById("retryWakeEnrollment").onclick=async()=>resolve(await this.enrollWakeWord({returnToSettings}));document.getElementById("leaveWakeEnrollment").onclick=()=>{host.classList.remove("show");if(returnToSettings)void accountSettings();resolve(false)}});
      }
      completed=i+1;
-     await this.save({wakeEnrollmentComplete:false,wakeEnrollmentSamples:completed,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:nyxDeviceId(),wakeEnrollmentUpdatedAt:new Date().toISOString()});
+     await this.saveWakeEnrollment({complete:false,samples:completed});
    }
-   await this.save({wakeEnrollmentComplete:true,wakeEnrollmentSamples:5,wakeEnrollmentVersion:1,wakeEnrollmentDeviceId:nyxDeviceId(),wakeEnrollmentUpdatedAt:new Date().toISOString(),handsFreeConfigured:true});
+   await this.saveWakeEnrollment({complete:true,samples:5});
    NYXSound.cue("success");
    card.innerHTML='<h2>Nyx knows this device</h2><p>Five wake samples confirmed. Say “Nyx” to get my attention. This setup is calibration, not identity verification.</p><button id="finishWakeEnrollment" class="primary">Continue</button>';
    return await new Promise(resolve=>{document.getElementById("finishWakeEnrollment").onclick=()=>{host.classList.remove("show");if(returnToSettings)void accountSettings();resolve(true)}});
