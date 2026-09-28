@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: nyx-local-training-capture
-Source commit: c9ddd505756ac5ed351494e27ed47a274ffb1a5f
+Release: force-https-and-hsts
+Source commit: pending-main-head
