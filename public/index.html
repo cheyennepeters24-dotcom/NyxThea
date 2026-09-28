@@ -309,14 +309,14 @@ window.NYXVoice=NYXVoice;
 const NYXLocalWake={
  detector:null,module:null,loading:null,active:false,lastError:null,
  async loadOrt(){
-   if(window.ort?.InferenceSession)return window.ort;
+   if(window.ort?.InferenceSession){try{if(window.ort?.env?.wasm){window.ort.env.wasm.wasmPaths="/vendor/";window.ort.env.wasm.numThreads=1}}catch{}return window.ort;}
    if(document.querySelector('script[data-nyx-ort]')){
      for(let i=0;i<20&&!window.ort?.InferenceSession;i++)await nyxDelay(100);
      return window.ort||null;
    }
    return await new Promise(resolve=>{
      const script=document.createElement("script");script.src="/vendor/ort.min.js";script.async=true;script.dataset.nyxOrt="true";
-     script.onload=()=>resolve(window.ort||null);script.onerror=()=>resolve(null);document.head.appendChild(script)
+     script.onload=()=>{try{if(window.ort?.env?.wasm){window.ort.env.wasm.wasmPaths="/vendor/";window.ort.env.wasm.numThreads=1}}catch{}resolve(window.ort||null)};script.onerror=()=>resolve(null);document.head.appendChild(script)
    })
  },
  async ensure(){
@@ -431,7 +431,10 @@ const NYXHandsFree={
        clearTimeout(this.timer);this.timer=null;
        if(!this.active||this.paused||token!==this.generation)return;
        const blob=new Blob(chunks,{type:recorder.mimeType||"audio/mp4"});
-       if(this.active&&!this.paused&&token===this.generation)setTimeout(()=>this.recordChunk(),40);
+       if(this.active&&!this.paused&&token===this.generation){
+         if(Date.now()>=this.engagedUntil)setTimeout(()=>void this.activateWakeMode(),40);
+         else setTimeout(()=>this.recordChunk(),40)
+       }
        if(blob.size>180&&this.wakeInFlight<2)void this.processChunk(blob,token)
      };
      recorder.start();
