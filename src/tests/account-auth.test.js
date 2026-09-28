@@ -429,3 +429,16 @@ test('production host redirects HTTP to HTTPS and sends HSTS', async () => {
   const secure = await worker.fetch(new Request('https://nyxthea.thecrimsonbluerose.com/'), env);
   assert.equal(secure.headers.get('strict-transport-security'), 'max-age=31536000');
 });
+
+
+test('account creation uses Cloudflare-supported PBKDF2 parameters', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const signup = await call('/api/auth/register', { method:'POST', data:{ username:'pbkdf2-limit', displayName:'PBKDF2', password:'pbkdf2-cloudflare-password' } });
+  assert.equal(signup.status,201);
+  const account=table('auth_accounts').get('pbkdf2-limit');
+  assert.equal(account.passwordHashIterations,100000);
+  assert.equal(typeof account.passwordHash,'string');
+  assert.equal(account.passwordHash.length,64);
+  const login=await call('/api/auth/login',{method:'POST',data:{username:'pbkdf2-limit',password:'pbkdf2-cloudflare-password'}});
+  assert.equal(login.status,200);
+});
