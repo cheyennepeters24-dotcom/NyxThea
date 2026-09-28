@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: ios-onboarding-voice-stability
-Source commit: b0857dd48ea2a9668b748eaf0ed695dd2e300240
+Release: onboarding-name-normalization
+Source commit: cdf9dbf65dfddfc5d35321ffe946a10e64ed0a08
