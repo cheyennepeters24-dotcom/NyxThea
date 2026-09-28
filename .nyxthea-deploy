@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: onboarding-name-normalization
-Source commit: cdf9dbf65dfddfc5d35321ffe946a10e64ed0a08
+Release: confirmed-name-pronunciation-loop
+Source commit: 97b55ccea1896f08994862845b74105314122b6d
