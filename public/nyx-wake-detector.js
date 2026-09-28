@@ -36,7 +36,7 @@ export class RollingAudioWindow{
 
 export class WakeCooldown{
   constructor(ms=DEFAULT_COOLDOWN_MS){this.ms=ms;this.last=-Infinity}
-  accept(now=performance?.now?.()??Date.now()){
+  accept(now=globalThis.performance?.now?.()??Date.now()){
     if(now-this.last<this.ms)return false;
     this.last=now;return true;
   }
