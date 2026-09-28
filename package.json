@@ -8,7 +8,8 @@
     "check:ui": "node scripts/check-ui.mjs",
     "check:source": "find src scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | xargs -0 -n1 node --check",
     "prepare:wake": "node scripts/prepare-wake-runtime.mjs",
-    "check:wake": "node scripts/check-wake-model.mjs"
+    "check:wake": "node scripts/check-wake-model.mjs",
+    "unpack:wake": "node scripts/unpack-wake-training.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"
