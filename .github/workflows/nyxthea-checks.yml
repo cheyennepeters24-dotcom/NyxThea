@@ -52,6 +52,18 @@ jobs:
       - name: Check source syntax
         run: npm run check:source
 
+  wake-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate Nyx wake model
+        run: npm run check:wake
+
   ui-syntax:
     runs-on: ubuntu-latest
     steps:
@@ -66,7 +78,7 @@ jobs:
 
   report:
     if: always() && vars.NYXTHEA_CI_INGEST_URL != ''
-    needs: [test, worker-syntax, source-syntax, ui-syntax]
+    needs: [test, worker-syntax, source-syntax, ui-syntax, wake-model]
     runs-on: ubuntu-latest
     steps:
       - name: Report build health to NyxThea System Admin
@@ -77,6 +89,7 @@ jobs:
           WORKER_RESULT: ${{ needs.worker-syntax.result }}
           SOURCE_RESULT: ${{ needs.source-syntax.result }}
           UI_RESULT: ${{ needs.ui-syntax.result }}
+          WAKE_RESULT: ${{ needs.wake-model.result }}
         run: |
           if [ -z "$INGEST_TOKEN" ]; then
             echo "CI ingestion token is not configured; skipping report."
@@ -87,10 +100,10 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg branch "$GITHUB_REF_NAME" \
             --arg sha "$GITHUB_SHA" \
-            --arg conclusion "$([[ "$TEST_RESULT" == success && "$WORKER_RESULT" == success && "$SOURCE_RESULT" == success && "$UI_RESULT" == success ]] && echo success || echo failure)" \
+            --arg conclusion "$([[ "$TEST_RESULT" == success && "$WORKER_RESULT" == success && "$SOURCE_RESULT" == success && "$UI_RESULT" == success && "$WAKE_RESULT" == success ]] && echo success || echo failure)" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --arg test "$TEST_RESULT" --arg worker "$WORKER_RESULT" --arg source "$SOURCE_RESULT" --arg ui "$UI_RESULT" \
-            '{runId:$runId,repository:$repository,branch:$branch,sha:$sha,status:"completed",conclusion:$conclusion,url:$url,jobs:[{name:"tests",result:$test},{name:"worker-syntax",result:$worker},{name:"source-syntax",result:$source},{name:"ui-syntax",result:$ui}]}')
+            --arg test "$TEST_RESULT" --arg worker "$WORKER_RESULT" --arg source "$SOURCE_RESULT" --arg ui "$UI_RESULT" --arg wake "$WAKE_RESULT" \
+            '{runId:$runId,repository:$repository,branch:$branch,sha:$sha,status:"completed",conclusion:$conclusion,url:$url,jobs:[{name:"tests",result:$test},{name:"worker-syntax",result:$worker},{name:"source-syntax",result:$source},{name:"ui-syntax",result:$ui},{name:"wake-model",result:$wake}]}')
           if ! curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer $INGEST_TOKEN" \
             -H "Content-Type: application/json" \
