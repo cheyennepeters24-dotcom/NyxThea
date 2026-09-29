@@ -81,7 +81,7 @@ function showRecoveryCode(code,next){panel("Save your recovery code",`<p>This co
 function claimHouseholdProfile(){panel("Join your NyxThea profile",'<p>Use the one-time household invite code from the person who introduced you to NyxThea. This attaches this device to the profile Nyx already created for you.</p><form id="claimForm"><input id="claimCode" class="field" required placeholder="Household invite code"><input id="claimUser" class="field" autocomplete="username" required placeholder="Choose a username"><input id="claimPassword" class="field" type="password" autocomplete="new-password" required minlength="12" placeholder="Choose a password (at least 12 characters)"><button class="primary" type="submit">Claim my profile</button></form><p id="claimNote" class="small" role="status"></p>');$("#claimForm").onsubmit=async e=>{e.preventDefault();let note=$("#claimNote");note.textContent="Connecting your profile…";try{let d=await api("/api/auth/claim",{method:"POST",body:JSON.stringify({inviteCode:$("#claimCode").value.trim(),username:$("#claimUser").value,password:$("#claimPassword").value})});credential=d.profile;session();void registerThisDevice();await NYXExperience.load();await loadConversationHistory();showRecoveryCode(d.recoveryCode,()=>{shut();if(!NYXExperience.settings?.onboarded)NYXExperience.onboard()})}catch(err){note.textContent=err.message}}}
 function recover(){panel("Recover your account",'<p>Use your saved recovery code, or send a code to your verified recovery email.</p><input id="recoverUser" class="field" autocomplete="username" required placeholder="Username"><div class="item"><strong>Recovery code</strong><input id="recoverCode" class="field" placeholder="Saved recovery code"><input id="recoverPassword" class="field" type="password" autocomplete="new-password" minlength="12" placeholder="New password (at least 12 characters)"><button id="recoverWithCode" class="primary">Reset with recovery code</button></div><div class="item"><strong>Recovery email</strong><button id="sendRecoveryEmail" class="secondary">Email me a 6-digit code</button><input id="emailRecoveryCode" class="field" inputmode="numeric" maxlength="6" placeholder="6-digit email code"><input id="emailRecoveryPassword" class="field" type="password" autocomplete="new-password" minlength="12" placeholder="New password (at least 12 characters)"><button id="recoverWithEmail" class="secondary">Reset with email code</button></div><p id="recoveryNote" class="small" role="status"></p>');$("#recoverWithCode").onclick=async()=>{try{let d=await api("/api/auth/recover",{method:"POST",body:JSON.stringify({username:$("#recoverUser").value,recoveryCode:$("#recoverCode").value,newPassword:$("#recoverPassword").value})});credential=d.profile;session();await NYXExperience.load();await loadConversationHistory();showRecoveryCode(d.recoveryCode,()=>{shut();if(!NYXExperience.settings?.onboarded)NYXExperience.onboard()})}catch(err){$("#recoveryNote").textContent=err.message}};$("#sendRecoveryEmail").onclick=async()=>{let note=$("#recoveryNote");try{let d=await api("/api/auth/recover-email/start",{method:"POST",body:JSON.stringify({username:$("#recoverUser").value})});note.textContent="If that account has a verified recovery email, a 6-digit code has been sent."}catch(err){note.textContent=err.message}};$("#recoverWithEmail").onclick=async()=>{try{let d=await api("/api/auth/recover-email/complete",{method:"POST",body:JSON.stringify({username:$("#recoverUser").value,code:$("#emailRecoveryCode").value,newPassword:$("#emailRecoveryPassword").value})});credential=d.profile;session();await NYXExperience.load();await loadConversationHistory();showRecoveryCode(d.recoveryCode,()=>shut())}catch(err){$("#recoveryNote").textContent=err.message}}}
 $("#unlock").onclick=()=>credential?openSettingsVerified():unlock();
-async function signOut(){invalidateConversationRequests();NYXHandsFree.stop();NYXVoice.stop();try{await api("/api/auth/logout",{method:"POST",timeoutMs:4000,body:"{}"})}catch{}finally{credential=null;conversationHistory=[];NYXExperience.settings=null;settingsAuthToken=null;session();shut();unlock()}}
+async function signOut(){invalidateConversationRequests();NYXExperience.stopOnboardingStream();NYXHandsFree.stop();NYXVoice.stop();try{await api("/api/auth/logout",{method:"POST",timeoutMs:4000,body:"{}"})}catch{}finally{credential=null;conversationHistory=[];NYXExperience.settings=null;settingsAuthToken=null;session();shut();unlock()}}
 function setVoiceSpeaker(profileId,name){
  NYXHandsFree.speakerProfileId=profileId||null;NYXHandsFree.speakerName=name||null;
  state(NYXHandsFree.active?"listening":"ready",profileId&&name?"Talking with "+name:"Talking with "+(credential?.displayName||"you"));
@@ -522,9 +522,7 @@ async function nyxPrimeFirstRun(){
   NYXSound.cue("startup");
   await nyxTimed(NYXVoice.prime(),1800,"Voice startup timed out").catch(()=>false);
   if(!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access is not available in this browser.");
-  const stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:true,video:false}),5500,"Microphone permission timed out.");
-  try{stream?.getTracks().forEach(track=>track.stop())}catch{}
-  return true;
+  return await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),5500,"Microphone permission timed out.");
 }
 
 let nyxStartupAudioCache=null;
@@ -546,7 +544,10 @@ function nyxStartupAudio(){
   const url=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"})),audio=new Audio(url);audio.preload="auto";audio.volume=1;nyxStartupAudioCache=audio;return audio;
 }
 const NYXExperience={
- settings:null,
+ settings:null,onboardingStream:null,
+ onboardingStreamReady(){return Boolean(this.onboardingStream?.getAudioTracks?.().some(track=>track.readyState==="live"))},
+ stopOnboardingStream(){try{this.onboardingStream?.getTracks?.().forEach(track=>track.stop())}catch{}this.onboardingStream=null},
+ async ensureOnboardingStream(){if(this.onboardingStreamReady())return this.onboardingStream;if(!navigator.mediaDevices?.getUserMedia)throw new Error("Microphone access is not available.");this.stopOnboardingStream();this.onboardingStream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),5500,"Microphone permission timed out.");return this.onboardingStream},
  async load(){try{const d=await api("/api/experience",{timeoutMs:6000});this.settings=d.settings;applyInterfacePreferences()}catch{this.settings=this.settings||{voiceEnabled:true,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:false,wakeEnrollmentComplete:false,wakeEnrollmentSamples:0,wakeEnrollmentVersion:0,wakeEnrollmentDeviceId:null,wakeEnrollments:{},soundMode:"minimal",decorativeSounds:true,onboarded:true,onboardingVersion:2,preferredName:credential?.displayName||null,visibleModules:["world","devices","health","security","memories","music","vehicle"]};applyInterfacePreferences()}},
  async save(patch){try{const d=await api("/api/experience",{method:"POST",body:JSON.stringify(patch)});this.settings=d.settings}catch(e){const card=document.getElementById("nyxOnboardCard");if(card)card.insertAdjacentHTML("beforeend",`<p class="small" role="alert">${esc(e.message)}. Please try again.</p>`);throw e}},
  state(value){document.body.dataset.nyxState=value;document.querySelector(".living-rose")?.classList.toggle("listening",value==="listening");document.querySelector(".living-rose")?.classList.toggle("speaking",value==="speaking")},
@@ -657,7 +658,7 @@ const NYXExperience={
    return new Promise(resolve=>{
      const status=document.getElementById("nyxVoiceStatus"),retry=document.getElementById("nyxVoiceRetry"),typed=document.getElementById("nyxVoiceTyped"),typedSubmit=document.getElementById("nyxVoiceTypedSubmit");
      let finished=false,timer=null,attempts=0,retrying=false,stream=null,recorder=null,recognition=null;
-     const cleanup=()=>{clearTimeout(timer);timer=null;try{if(recorder&&recorder.state!=="inactive")recorder.stop()}catch{}recorder=null;try{recognition?.abort()}catch{}recognition=null;try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null;this.state("idle")};
+     const cleanup=()=>{clearTimeout(timer);timer=null;try{if(recorder&&recorder.state!=="inactive")recorder.stop()}catch{}recorder=null;try{recognition?.abort()}catch{}recognition=null;stream=null;this.state("idle")};
      const done=value=>{if(finished)return;finished=true;cleanup();resolve(String(value||"").trim())};
      const showTyped=message=>{cleanup();status.textContent=message||"You can type this answer instead.";retry.hidden=true;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false;typed.focus()}else done("")};
      const miss=async message=>{if(finished||retrying)return;retrying=true;cleanup();attempts++;if(attempts<=2){status.textContent=message||"I didn’t catch that.";await NYXVoice.say("I didn’t catch that. Say that again for me.");retrying=false;setTimeout(begin,380)}else{status.textContent="I’m having trouble hearing you. Tap once and try again, or type your answer.";retry.hidden=false;if(allowTyped){typed.hidden=false;typedSubmit.hidden=false}}};
@@ -670,15 +671,15 @@ const NYXExperience={
      };
      const beginMedia=async()=>{
        try{
-         stream=await nyxMediaRequest(navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}),5500,"Microphone permission timed out.");
-         if(finished){stream.getTracks().forEach(t=>t.stop());return}
+         stream=await this.ensureOnboardingStream();
+         if(finished)return
          const type=["audio/mp4","audio/webm","audio/ogg"].find(t=>MediaRecorder.isTypeSupported(t));
          recorder=type?new MediaRecorder(stream,{mimeType:type}):new MediaRecorder(stream);
          const chunks=[];recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
          recorder.onstart=()=>{status.textContent="Listening…";this.state("listening")};
          recorder.onerror=()=>void miss("I couldn’t use the microphone.");
          recorder.onstop=async()=>{
-           const localStream=stream;stream=null;try{localStream?.getTracks().forEach(t=>t.stop())}catch{}
+           stream=null;
            const localRecorder=recorder;recorder=null;
            if(finished||retrying)return;
            this.state("thinking");status.textContent="Listening back…";
@@ -728,7 +729,8 @@ const NYXExperience={
        if(running)return;
        running=true;button.disabled=true;button.textContent="Opening NYX…";status.textContent="Opening voice…";
        try{
-         await nyxPrimeFirstRun();
+         this.stopOnboardingStream();
+         this.onboardingStream=await nyxPrimeFirstRun();
          status.textContent="Voice ready.";
          button.textContent="Ready";
          resolve();
@@ -757,7 +759,7 @@ const NYXExperience={
    let name="";
    while(!name){
      const rawName=await this.sayAndListen("Hello. I’m NYX. Before we begin, I’d like to know what to call you.",{hint:"Say your name, for example: My name is Cheyenne."});
-     if(!rawName){card.innerHTML='<h2>I lost the microphone.</h2><p>Tap below to try the spoken introduction again.</p><button id="nyxRestartVoice" class="primary">Try again</button>';document.getElementById("nyxRestartVoice").onclick=()=>this.onboard(edit);return}
+     if(!rawName){this.stopOnboardingStream();card.innerHTML='<h2>I lost the microphone.</h2><p>Tap below to try the spoken introduction again.</p><button id="nyxRestartVoice" class="primary">Try again</button>';document.getElementById("nyxRestartVoice").onclick=()=>this.onboard(edit);return}
      const heardName=cleanName(rawName)||String(rawName).trim().slice(0,80);
      const nameCorrect=await askYesNo("I heard "+heardName+". Is that what you want me to call you?");
      if(nameCorrect){name=heardName;break}
@@ -779,11 +781,11 @@ const NYXExperience={
    card.innerHTML='<h2>How much should I speak up?</h2><div class="nyx-choice"><button data-p="quiet"><strong>Quiet</strong><br>I’m here when you ask.</button><button data-p="helpful"><strong>Helpful — Recommended</strong><br>I’ll speak up when something genuinely matters.</button><button data-p="engaged"><strong>Engaged</strong><br>Be involved. Notice things and suggest what’s next.</button></div>';
    host.querySelectorAll("[data-p]").forEach(b=>b.onclick=async()=>{try{await this.save({proactiveMode:b.dataset.p});this.style(name,host)}catch(e){const status=host.querySelector("#nyxOnboardCard");status.innerHTML+=`<p class="small">${esc(e.message)}</p>`}});
  },
- style(name,host){host.querySelector("#nyxOnboardCard").innerHTML='<h2>How should we talk?</h2><div class="nyx-choice"><button data-s="professional"><strong>Professional</strong><br>Straightforward and polished.</button><button data-s="natural"><strong>Natural — Recommended</strong><br>Relaxed, warm, occasional humor.</button><button data-s="unfiltered"><strong>Unfiltered</strong><br>More personality, teasing and casual language.</button></div>';host.querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{try{await this.save({communicationStyle:b.dataset.s,onboarded:true,onboardingVersion:2,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:true});NYXSound.cue("success");await NYXVoice.say("Perfect. Now teach me how you say Nyx.");const enrolled=await this.enrollWakeWord();if(enrolled){await this.save({handsFreeEnabled:true});NYXHandsFree.start()}else{host.classList.remove("show")}}catch(e){host.querySelector("#nyxOnboardCard").innerHTML+=`<p class="small">${esc(e.message)}</p>`}})},
+ style(name,host){this.stopOnboardingStream();host.querySelector("#nyxOnboardCard").innerHTML='<h2>How should we talk?</h2><div class="nyx-choice"><button data-s="professional"><strong>Professional</strong><br>Straightforward and polished.</button><button data-s="natural"><strong>Natural — Recommended</strong><br>Relaxed, warm, occasional humor.</button><button data-s="unfiltered"><strong>Unfiltered</strong><br>More personality, teasing and casual language.</button></div>';host.querySelectorAll("[data-s]").forEach(b=>b.onclick=async()=>{try{await this.save({communicationStyle:b.dataset.s,onboarded:true,onboardingVersion:2,voiceAssistantMode:true,handsFreeEnabled:false,handsFreeConfigured:true});NYXSound.cue("success");await NYXVoice.say("Perfect. Now teach me how you say Nyx.");const enrolled=await this.enrollWakeWord();if(enrolled){await this.save({handsFreeEnabled:true});NYXHandsFree.start()}else{host.classList.remove("show")}}catch(e){host.querySelector("#nyxOnboardCard").innerHTML+=`<p class="small">${esc(e.message)}</p>`}})},
  initMic(){document.getElementById("nyxMic").onclick=toggleVoice}
 };
-document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.voiceSessionEnabled()){void (async()=>{const unlocked=await enforceProfileLock();if(unlocked)NYXExperience.startVoiceSession()})()}});
-window.addEventListener("pagehide",()=>{NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){NYXExperience.stopOnboardingStream();NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)}else if(credential&&!NYXExperience.needsOnboarding()&&NYXExperience.voiceSessionEnabled()){void (async()=>{const unlocked=await enforceProfileLock();if(unlocked)NYXExperience.startVoiceSession()})()}});
+window.addEventListener("pagehide",()=>{NYXExperience.stopOnboardingStream();NYXHandsFree.stop();NYXVoice.stop();if(guideSession||guidePending.length)endLiveGuide(false)});
 function dismissNyxLaunch(){document.getElementById("nyxLaunch")?.classList.add("done")}
 window.addEventListener("load",()=>{
   const launchTimer=setTimeout(dismissNyxLaunch,3200);
