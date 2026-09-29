@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: confirmed-name-pronunciation-loop
-Source commit: 97b55ccea1896f08994862845b74105314122b6d
+Release: ios-single-stream-onboarding
+Source commit: f7cc191db16d47f30fdb9d1bac2f6e577397fb97
