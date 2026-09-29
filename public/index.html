@@ -651,7 +651,7 @@ const NYXExperience={
      await NYXHandsFree.startWithStream(wakeStream);
    };
  },
- async sayAndListen(prompt,{hint="I’m listening…",timeout=12000,allowTyped=true}={}){
+ async sayAndListen(prompt,{hint="I’m listening…",timeout=12000,allowTyped=true,requireTap=false}={}){
    const card=document.getElementById("nyxOnboardCard");
    card.innerHTML=`<h2>${esc(prompt)}</h2><div style="display:grid;place-items:center;padding:26px 0"><div class="nyx-voice-orb" style="width:92px;height:92px;border-radius:50%;border:1px solid #83d0ff88;box-shadow:0 0 34px #287cff66, inset 0 0 24px #1b59b855;display:grid;place-items:center;font-size:1.8rem">◉</div></div><p id="nyxVoiceStatus" class="small" style="text-align:center">${esc(hint)}</p><button id="nyxVoiceRetry" class="secondary" hidden>Tap once to answer</button><input id="nyxVoiceTyped" class="field" hidden placeholder="Type your answer instead"><button id="nyxVoiceTypedSubmit" class="secondary" hidden>Continue with typed answer</button>`;
    await NYXVoice.say(prompt);
@@ -715,7 +715,10 @@ const NYXExperience={
      retry.onclick=()=>{retry.hidden=true;typed.hidden=true;typedSubmit.hidden=true;attempts=0;begin()};
      typedSubmit.onclick=()=>{const value=typed.value.trim();if(value)done(value)};
      typed.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();typedSubmit.click()}};
-     setTimeout(begin,420);
+     if(requireTap){
+       status.textContent=hint||"Tap once when you're ready.";
+       retry.hidden=false;retry.textContent="Tap to answer";
+     }else setTimeout(begin,420);
    })
  },
  async onboard(edit=false){
@@ -747,21 +750,17 @@ const NYXExperience={
      if(/\s+is\s+/i.test(text)&&/^my\s+name/i.test(String(value||"")))text=text.split(/\s+is\s+/i).pop().trim();
      return text.slice(0,80);
    };
-   const askYesNo=async(prompt)=>{
-     while(true){
-       const answer=(await this.sayAndListen(prompt,{hint:"Say yes or no."})).trim().toLowerCase();
-       if(/^(?:yes|yeah|yep|yup|correct|right|that's right|that is right)\b/.test(answer))return true;
-       if(/^(?:no|nope|nah|wrong|incorrect|that's wrong|that is wrong)\b/.test(answer))return false;
-       await NYXVoice.say("I need a yes or no so I don’t guess.");
-       prompt="Was that correct? Say yes or no.";
-     }
+   const askConfirm=async(prompt)=>{
+     await NYXVoice.say(prompt);
+     card.innerHTML=`<h2>${esc(prompt)}</h2><p class="small">Confirm what Nyx heard before continuing.</p><div class="nyx-choice"><button id="nyxConfirmYes" class="primary">Yes, that's right</button><button id="nyxConfirmNo" class="secondary">No, try again</button></div>`;
+     return await new Promise(resolve=>{document.getElementById("nyxConfirmYes").onclick=()=>resolve(true);document.getElementById("nyxConfirmNo").onclick=()=>resolve(false)});
    };
    let name="";
    while(!name){
      const rawName=await this.sayAndListen("Hello. I’m NYX. Before we begin, I’d like to know what to call you.",{hint:"Say your name, for example: My name is Cheyenne."});
      if(!rawName){this.stopOnboardingStream();card.innerHTML='<h2>I lost the microphone.</h2><p>Tap below to try the spoken introduction again.</p><button id="nyxRestartVoice" class="primary">Try again</button>';document.getElementById("nyxRestartVoice").onclick=()=>this.onboard(edit);return}
      const heardName=cleanName(rawName)||String(rawName).trim().slice(0,80);
-     const nameCorrect=await askYesNo("I heard "+heardName+". Is that what you want me to call you?");
+     const nameCorrect=await askConfirm("I heard "+heardName+". Is that what you want me to call you?");
      if(nameCorrect){name=heardName;break}
      await NYXVoice.say("Okay. I won’t save that. Tell me your name again.");
    }
@@ -769,10 +768,10 @@ const NYXExperience={
    await NYXVoice.say("Nice to meet you, "+name+".");
    let pronunciation=name,pronunciationConfirmed=false;
    while(!pronunciationConfirmed){
-     const spokenPronunciation=await this.sayAndListen("How would you like me to pronounce "+name+"? Say it exactly the way you want me to say it.",{hint:"Say your name the way it should sound."});
+     const spokenPronunciation=await this.sayAndListen("How would you like me to pronounce "+name+"? Say it exactly the way you want me to say it.",{hint:"Tap once, then say your name the way it should sound.",requireTap:true});
      if(spokenPronunciation)pronunciation=cleanName(spokenPronunciation)||pronunciation;
      await NYXVoice.say("Let me try it. "+pronunciation+".");
-     pronunciationConfirmed=await askYesNo("Did I pronounce "+name+" correctly?");
+     pronunciationConfirmed=await askConfirm("Did I pronounce "+name+" correctly?");
      if(!pronunciationConfirmed)await NYXVoice.say("Okay. Let’s try that again. I won’t move on until I get it right.");
    }
    await this.save({pronunciation});await api("/api/household/identity",{method:"POST",body:JSON.stringify({pronunciation})});
