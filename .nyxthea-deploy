@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: ios-single-stream-onboarding
-Source commit: f7cc191db16d47f30fdb9d1bac2f6e577397fb97
+Release: ios-tap-confirm-onboarding
+Source commit: 5bce8dd1f7146194952bb5b9be95d14cb54d8265
