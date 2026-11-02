@@ -101,7 +101,11 @@ async function api(request, env, url) {
       authFailureLimitReset(request, "login");
       return json({ profile: result.profile }, 200, { "set-cookie": sessionCookie(result.token) });
     } catch (error) {
-      if (error?.status === 401) authFailureLimitRecord(request, "login", 900000);
+      if (error?.status === 401) {
+        authFailureLimitRecord(request, "login", 900000);
+        // Return a response so the Durable Object commits the failed-attempt counter.
+        return json({ error: error.message }, 401);
+      }
       throw error;
     }
   }

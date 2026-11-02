@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: ios-tap-confirm-onboarding
-Source commit: 5bce8dd1f7146194952bb5b9be95d14cb54d8265
+Release: startup-onboarding-recovery
+Includes: persistent login throttling, resilient startup, bounded voice prompts and recoverable onboarding.

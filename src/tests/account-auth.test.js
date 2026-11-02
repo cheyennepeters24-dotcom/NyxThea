@@ -401,6 +401,26 @@ test('successful logins do not consume the failed-login throttle budget', async 
   assert.equal(table('auth_rate_limits').get('login:203.0.113.10'), undefined);
 });
 
+test('failed-login limit survives a cold restart and expires after its window', async () => {
+  resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
+  const headers={'cf-connecting-ip':'203.0.113.99'};
+  for(let i=0;i<10;i++) {
+    const bad=await call('/api/auth/login',{method:'POST',headers,data:{username:'missing-account',password:'wrong-password'}});
+    assert.equal(bad.status,401);
+  }
+  resetStateForTests(); object=new NyxtheaState({storage},env);
+  const blocked=await call('/api/auth/login',{method:'POST',headers,data:{username:'missing-account',password:'wrong-password'}});
+  assert.equal(blocked.status,429);
+  const key='nyxthea-state:auth_rate_limits:login%3A203.0.113.99';
+  const saved=await storage.get(key);
+  assert.equal(saved.count,10);
+  saved.start=Date.now()-900001;
+  await storage.put(key,saved);
+  resetStateForTests(); object=new NyxtheaState({storage},env);
+  assert.equal((await call('/api/auth/login',{method:'POST',headers,data:{username:'missing-account',password:'wrong-password'}})).status,401);
+  assert.equal((await storage.get(key)).count,1);
+});
+
 test('recent conversation history is isolated to the signed-in profile', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const first = await call('/api/auth/register', { method:'POST', data:{username:'history-one',displayName:'One',password:'history-one-password-123'} });
