@@ -462,3 +462,22 @@ test('account creation uses Cloudflare-supported PBKDF2 parameters', async () =>
   const login=await call('/api/auth/login',{method:'POST',data:{username:'pbkdf2-limit',password:'pbkdf2-cloudflare-password'}});
   assert.equal(login.status,200);
 });
+
+test('saved communication style reaches both authenticated conversation routes', async () => {
+  resetStateForTests();storage.rows.clear();object=new NyxtheaState({storage},env);
+  const signup=await call('/api/auth/register',{method:'POST',data:{username:'style-routing',displayName:'Style',password:'style-routing-password-123'}});
+  const cookie=signup.headers.get('set-cookie').split(';')[0];
+  let captured='';const previousAI=env.AI;
+  env.AI={run:async(_model,input)=>{captured=input.prompt;return {response:'Let’s sort it out.'}}};
+  try {
+    for(const communicationStyle of ['professional','natural','unfiltered']) {
+      assert.equal((await call('/api/experience',{method:'POST',cookie,data:{communicationStyle}})).status,200);
+      for(const route of ['/api/chat','/api/voice/chat']) {
+        captured='';
+        const result=await call(route,{method:'POST',cookie,data:{message:'Help me organize my afternoon.'}});
+        assert.equal(result.status,200);
+        assert.match(captured,new RegExp(communicationStyle+' mode:','i'));
+      }
+    }
+  } finally {env.AI=previousAI;}
+});

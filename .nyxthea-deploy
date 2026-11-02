@@ -1,4 +1,4 @@
 NyxThea production deploy trigger
 Target: main
-Release: startup-onboarding-recovery
-Includes: persistent login throttling, resilient startup, bounded voice prompts and recoverable onboarding.
+Release: conversational-personality
+Includes: saved style applied to voice and text, dry wit and playful sarcasm in natural mode.

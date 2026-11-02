@@ -55,3 +55,21 @@ test("low-confidence or unaddressed speech stays quiet", () => {
   assert.equal(assessWakeTranscript({transcript:"Nyx tell me the weather",confidence:.3}).safeToRespond,false);
   assert.equal(assessWakeTranscript({transcript:"tell me the weather",confidence:.99}).recognized,false);
 });
+
+test('voice and text use the same saved personality with distinct style modes', async () => {
+  const {converseFast,conversationPersonality}=await import('../core/conversation.js');
+  for(const converseMode of [converse,converseFast]) {
+    let prompt='';
+    const ai={run:async(_model,input)=>{prompt=input.prompt;return {response:'Let’s sort it out.'}}};
+    await converseMode(ai,'Help me organize my afternoon.',{}, {communicationStyle:'natural'});
+    assert.match(prompt,/dry humor, playful sarcasm/i);
+    await converseMode(ai,'Help me organize my afternoon.',{}, {communicationStyle:'professional'});
+    assert.match(prompt,/Keep sarcasm and teasing off/);
+    assert.doesNotMatch(prompt,/Natural mode:/);
+    await converseMode(ai,'Help me organize my afternoon.',{}, {communicationStyle:'unfiltered'});
+    assert.match(prompt,/a little bite/);
+  }
+  const child=conversationPersonality({communicationStyle:'unfiltered',role:'child'});
+  assert.match(child,/age-appropriate/);
+  assert.doesNotMatch(child,/Unfiltered mode:/);
+});
