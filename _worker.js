@@ -11,7 +11,7 @@ import { addBiometricCredential, beginBiometric, deviceLockState, disableProfile
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
-import { orchestrate } from "./src/core/orchestration.js"; import { converseFast } from "./src/core/conversation.js"; import { buildContext } from "./src/core/context.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
+import { orchestrate } from "./src/core/orchestration.js"; import { converseFast, conversationFailure } from "./src/core/conversation.js"; import { buildContext } from "./src/core/context.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
 import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, MAX_MEDIA_JSON_BYTES, readJson, securityHeaders } from "./src/security.js";
 import { captureWorldFact, worldFacts, worldSummary, changedSince } from "./src/models/world-model.js";
 import { configurePerson, personModel, publicPerson, updatePreference } from "./src/models/person-model.js";
@@ -353,8 +353,8 @@ async function api(request, env, url) {
       ]);
       if(response.text)recordTurn(speaker.id,"assistant",response.text);
       return json({answer:response.text,modelUsed:response.modelUsed,fast:true,speakerProfileId:speaker.id});
-    }catch{
-      return json({answer:"I hit a snag. Ask me that again.",degraded:true,fast:true,speakerProfileId:speaker.id});
+    }catch(error){
+      return json({...conversationFailure(error),degraded:true,fast:true,speakerProfileId:speaker.id});
     }
   }
   if (request.method === "POST" && url.pathname === "/api/voice/speak") {

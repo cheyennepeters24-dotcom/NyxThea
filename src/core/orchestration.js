@@ -1,6 +1,6 @@
 import { routeDecision } from "./decision.js";
 import { buildContext } from "./context.js";
-import { converse } from "./conversation.js";
+import { converse, conversationFailure } from "./conversation.js";
 import { makePlan } from "./problem-solving.js";
 import { researchWikipedia } from "./research.js";
 import { verifyResearch } from "./research-verification.js";
@@ -15,5 +15,5 @@ export async function orchestrate({ ai, message, memories, conversation, authori
   if (decision.route === "research") { const candidates = await withinBudget(researchWikipedia(message), decision.complexity.budgetMs); const results = verifyResearch(candidates); return { type: "research", answer: "Here is what I found through Wikipedia. Review the linked sources for details.", context, intentProtection, research: synthesizeResearch(results), plan: makePlan(message), reasoning: createReasoningRecord({ message, route: decision.route, research: candidates, authorization }), processing: decision.processing, timing: timing() }; }
   try { const response = await withinBudget(converse(ai, message, buildContext({ memories, conversation }), personality), decision.complexity.budgetMs);
     return { type: "conversation", answer: response.text, modelUsed: response.modelUsed, context, intentProtection, plan: makePlan(message), reasoning: createReasoningRecord({ message, route: decision.route, authorization }), processing: decision.processing, timing: timing() };
-  } catch { return { type: "conversation_unavailable", answer: "I heard you, but I couldn't finish that reply right now. Please try again in a moment.", modelUsed: false, degraded: true, context, intentProtection, processing: decision.processing, timing: timing() }; }
+  } catch (error) { return { type: "conversation_unavailable", ...conversationFailure(error), modelUsed: false, degraded: true, context, intentProtection, processing: decision.processing, timing: timing() }; }
 }

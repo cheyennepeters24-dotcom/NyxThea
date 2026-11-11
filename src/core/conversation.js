@@ -1,3 +1,10 @@
+export function conversationFailure(error) {
+  const detail = String(error?.message || error || "");
+  const quota = /daily.{0,40}(?:free allocation|allowance|quota)|used up.{0,80}neurons|upgrade.{0,40}Workers Paid/i.test(detail);
+  if (quota) return {errorCode:"ai_daily_allowance_exhausted", answer:"My daily AI allowance is used up, so I can’t generate replies right now. Retrying won’t help until the allowance renews or the account’s AI plan is upgraded."};
+  return {errorCode:error?.status === 504 ? "ai_timeout" : "ai_unavailable", answer:"I heard you, but I couldn't finish that reply right now. Please try again in a moment."};
+}
+
 const MODELS = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/meta/llama-3.1-8b-instruct-fp8"];
 const runAI = async (ai, model, input, ms) => {
   let timer;
@@ -66,7 +73,7 @@ export async function converseFast(ai, message, context, personality = {}) {
 
 async function generateReply(ai, message, context, system, fast) {
   // Bound prompt growth and do not teach the model to repeat outage notices.
-  const failed = /^(?:I heard you, but I couldn't finish|I hit a snag\.|I'm having trouble reaching)/;
+  const failed = /^(?:I heard you, but I couldn't finish|I hit a snag\.|I'm having trouble reaching|My daily AI allowance is used up)/;
   const history = (context?.conversation || []).filter(turn =>
     ["user", "assistant"].includes(turn.role) && typeof turn.text === "string" && !(turn.role === "assistant" && failed.test(turn.text))
   ).slice(-8).map(turn => ({ role: turn.role, content: turn.text.slice(0, 1600) }));
@@ -80,7 +87,7 @@ async function generateReply(ai, message, context, system, fast) {
       const text = extractText(result);
       if (text) return {text, modelUsed:true, fallbackUsed:index > 0};
       lastError = Object.assign(new Error("Conversation model returned an empty response."), {code:"empty_response"});
-    } catch (error) { lastError = error; }
+    } catch (error) { lastError = error; if (conversationFailure(error).errorCode === "ai_daily_allowance_exhausted") throw error; }
     // No transcript, profile IDs, or provider error strings in operational logs.
     console.warn(JSON.stringify({event:"conversation_attempt_failed", attempt:index + 1, reason:lastError?.status === 504 ? "timeout" : lastError?.code === "empty_response" ? "empty_response" : "provider_error"}));
   }

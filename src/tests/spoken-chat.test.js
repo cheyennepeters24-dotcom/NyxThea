@@ -92,3 +92,13 @@ test('child model requests cannot inherit adult language from an unfiltered pref
   assert.match(request.messages[0].content,/free of profanity or sexual innuendo/);
   assert.doesNotMatch(request.messages[0].content,/Adult language is opted in/);
 });
+
+
+test('daily account quota is reported honestly and does not retry the same exhausted allowance', async()=>{
+  let calls=0;
+  const response=await orchestrate({ai:{run:async()=>{calls++;throw Error('AiError: you have used up your daily free allocation of 10,000 neurons, please upgrade to Cloudflare Workers Paid plan');}},message:'Will you marry me?',memories:[],conversation:[],authorization:{}});
+  assert.equal(calls,1);
+  assert.equal(response.errorCode,'ai_daily_allowance_exhausted');
+  assert.match(response.answer,/daily AI allowance is used up/);
+  assert.doesNotMatch(response.answer,/try again in a moment/i);
+});
