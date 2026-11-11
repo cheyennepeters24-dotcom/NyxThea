@@ -6398,8 +6398,13 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     if (guideSession || guidePending.length) endLiveGuide(false);
   });
   function dismissNyxLaunch() {
-    var _a;
-    (_a = document.getElementById("nyxLaunch")) == null ? void 0 : _a.classList.add("done");
+    var launch = document.getElementById("nyxLaunch");
+    if (launch) {
+      launch.classList.add("done");
+      launch.style.display = "none";
+      launch.style.pointerEvents = "none";
+      launch.setAttribute("aria-hidden", "true");
+    }
   }
   window.addEventListener("DOMContentLoaded", function () {
     var launchTimer = setTimeout(dismissNyxLaunch, 3200);
