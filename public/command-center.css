@@ -1,4 +1,7 @@
 /* Reference-led command center. Existing controls and authenticated flows remain intact. */
+.rose-stage{background-image:url('./command-rose-hero.jpg')!important}
+.domain-grid>.glass:nth-child(-n+4){background-image:url('./command-worlds.jpg')!important}
+.command-row:before,.brand-mark,.compact-rose{background-image:url('./nyxthea-rose.jpg')!important}
 :root{--side:190px;--radius:14px;--line:#6489c15c}
 body{background:#020611;color:#e2ebfa}
 .workspace{background:radial-gradient(ellipse at 50% 16%,#092b6140,transparent 52%)}
