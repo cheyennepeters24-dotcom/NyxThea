@@ -13,5 +13,8 @@
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
   }
 }
