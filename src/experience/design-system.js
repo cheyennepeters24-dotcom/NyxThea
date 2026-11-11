@@ -30,7 +30,7 @@ export function defaultExperience(profileId) {
   return {
     profileId, proactiveMode:"helpful", communicationStyle:"natural", soundMode:"minimal",
     motionMode:"full", lockScreenPrivacy:"private", focusMode:false, doNotDisturb:false,
-    privateConversation:false, voiceEnabled:true, handsFreeEnabled:false, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
+    privateConversation:false, voiceOutputMode:"device", voiceEnabled:true, handsFreeEnabled:false, handsFreeConfigured:false, voiceAssistantMode:true, decorativeSounds:true,
     wakeEnrollmentComplete:false, wakeEnrollmentSamples:0, wakeEnrollmentVersion:0, wakeEnrollmentDeviceId:null, wakeEnrollmentUpdatedAt:null, wakeEnrollments:{},
     visibleModules:["world","devices","health","security","memories","music","vehicle"],
     pronunciation:null, preferredName:null, onboarded:false, onboardingVersion:0, updatedAt:now()
@@ -41,7 +41,7 @@ export function updateExperience(profileId, patch={}) {
   const current=experienceSettings(profileId);
   const next={...current};
   const enumSet=(key,values)=>{ if(patch[key]!==undefined){ if(!values.includes(patch[key])) throw Object.assign(new Error("Invalid "+key+"."),{status:400}); next[key]=patch[key]; }};
-  enumSet("proactiveMode",proactiveModes); enumSet("communicationStyle",communicationStyles); enumSet("soundMode",soundModes); enumSet("motionMode",motionModes); enumSet("lockScreenPrivacy",lockScreenPrivacy);
+  enumSet("voiceOutputMode",["device","cloud"]); enumSet("proactiveMode",proactiveModes); enumSet("communicationStyle",communicationStyles); enumSet("soundMode",soundModes); enumSet("motionMode",motionModes); enumSet("lockScreenPrivacy",lockScreenPrivacy);
   for(const key of ["focusMode","doNotDisturb","privateConversation","voiceEnabled","handsFreeEnabled","handsFreeConfigured","voiceAssistantMode","decorativeSounds","wakeEnrollmentComplete"]) if(patch[key]!==undefined) next[key]=Boolean(patch[key]);
   if(patch.wakeEnrollmentSamples!==undefined){const count=Number(patch.wakeEnrollmentSamples);if(!Number.isInteger(count)||count<0||count>5)throw Object.assign(new Error("Invalid wakeEnrollmentSamples."),{status:400});next.wakeEnrollmentSamples=count;}
   if(patch.wakeEnrollmentVersion!==undefined){const version=Number(patch.wakeEnrollmentVersion);if(!Number.isInteger(version)||version<0||version>20)throw Object.assign(new Error("Invalid wakeEnrollmentVersion."),{status:400});next.wakeEnrollmentVersion=version;}

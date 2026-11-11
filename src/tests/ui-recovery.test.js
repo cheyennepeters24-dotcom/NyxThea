@@ -37,3 +37,24 @@ test('onboarding save failures offer retry instead of an unhandled rejection',as
  await experience.onboard();assert.match(document.getElementById('nyxOnboardCard').innerHTML,/Connection interrupted/);
  assert.equal(typeof document.getElementById('nyxRetrySetup').onclick,'function');assert.equal(stopped,1);
 });
+
+test('interrupting device speech settles its pending turn immediately without a cloud request',async()=>{
+ let speakCalls=0,cloudCalls=0;
+ const context={window:{speechSynthesis:{getVoices:()=>[{lang:'en-GB',name:'Serena'}],cancel(){},speak(){speakCalls++;}}},document:{body:{dataset:{}}},mic:{setAttribute(){}},NYXHandsFree:{resume(){}},NYXExperience:{settings:{voiceOutputMode:'device'}},SpeechSynthesisUtterance:function(text){this.text=text;},fetch(){cloudCalls++;throw Error('Device mode must not fetch');},setTimeout,clearTimeout,URL:{revokeObjectURL(){}},Promise};
+ context.speechSynthesis=context.window.speechSynthesis;
+ const code=between('const NYXVoice={','window.NYXVoice=NYXVoice;');
+ const voice=vm.runInNewContext(code+';NYXVoice',context);
+ const pending=voice.say('A spoken reply that has not ended.');
+ voice.stopSpeech();
+ const result=await Promise.race([pending,new Promise((_,reject)=>setTimeout(()=>reject(Error('Speech cancellation left a pending turn')),100))]);
+ assert.equal(result,false);assert.equal(speakCalls,1);assert.equal(cloudCalls,0);assert.equal(voice.speaking,false);
+});
+
+test('foreground wake prefers supported browser recognition instead of uploading idle audio',async()=>{
+ let started=0,media=0;
+ const context={window:{SpeechRecognition:function(){this.start=()=>{started++};}},document:{hidden:false,getElementById:()=>({textContent:'',setAttribute(){}})},navigator:{mediaDevices:{getUserMedia(){media++;throw Error('Should use browser recognizer');}}},state(){},setTimeout,clearTimeout,Number};
+ const code=between('const NYXHandsFree={','document.getElementById("wakeToggle").onclick=');
+ const handsfree=vm.runInNewContext(code+';NYXHandsFree',context);
+ handsfree.active=true;await handsfree.open();
+ assert.equal(started,1);assert.equal(media,0);
+});

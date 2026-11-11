@@ -1,3 +1,4 @@
+import { explicitMemoryReply, relevantMemories } from "./src/core/conversation-memory.js";
 import { getCapabilities } from "./src/capabilities/capabilities.js";
 import { describeDistributedSystem } from "./src/architecture/distributed.js";
 import { registerEndpoint, removeEndpoint, trustedEndpointSignal, topology } from "./src/architecture/endpoints.js";
@@ -11,7 +12,7 @@ import { addBiometricCredential, beginBiometric, deviceLockState, disableProfile
 import { requireProfileAccess } from "./src/privacy/authorization.js";
 import { requestConnection, authorizeConnection, revokeConnection, integrationStatus, integrationAudit } from "./src/integrations/integrations.js";
 import { createRecord, listRecords, grantConsent, revokeConsent, vehicleExplanation } from "./src/domains/records.js";
-import { orchestrate } from "./src/core/orchestration.js"; import { converseFast, conversationFailure } from "./src/core/conversation.js"; import { buildContext } from "./src/core/context.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
+import { orchestrate } from "./src/core/orchestration.js"; import { converseFast, conversationFailure } from "./src/core/conversation.js"; import { buildContext } from "./src/core/context.js"; import { evaluateOpportunity } from "./src/core/opportunity.js"; import { conversationState, conversationContext, clearConversation, recordTurn, recentTurns, setConversationState } from "./src/core/conversation-state.js";
 import { memoryService } from "./src/memory/memory-integration.js"; import { privacySummary } from "./src/privacy/privacy.js"; import { enforceRateLimit, MAX_MEDIA_JSON_BYTES, readJson, securityHeaders } from "./src/security.js";
 import { captureWorldFact, worldFacts, worldSummary, changedSince } from "./src/models/world-model.js";
 import { configurePerson, personModel, publicPerson, updatePreference } from "./src/models/person-model.js";
@@ -60,6 +61,10 @@ async function own(request, env, action) {
 }
 function isHouseholdAdmin(profile) { const identity=profileIdentity(profile.id); if(profile.role==="child"||(identity?.birthday&&identity.developmentalStage!=="adult"))return false; const household=householdSummary(profile.id); return Boolean(profile.permissions.includes("household_admin")||household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner")); }
 function requireAdmin(profile) { if (!isHouseholdAdmin(profile)) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function conversationSpeaker(profile) {
+  const identity=profileIdentity(profile.id);
+  return {name:identity?.preferredName||profile.displayName, pronunciation:identity?.pronunciation||null, source:"active_authenticated_profile", child:conversationPreferences(profile).role === "child"};
+}
 function conversationPreferences(profile) {
   const identity = profileIdentity(profile.id);
   const child = profile.role === "child" || Boolean(identity?.birthday && identity.developmentalStage !== "adult");
@@ -342,11 +347,15 @@ async function api(request, env, url) {
     }
     enforceRateLimit(`${speaker.id}:voice-chat`,{limit:60,windowMs:60000});
     const prompt=message.trim();
+    if(conversationState(speaker.id).mode === "quiet")return json({answer:"",type:"quiet",fast:true,speakerProfileId:speaker.id});
     recordTurn(speaker.id,"user",prompt);
     const education=educationGuidance(speaker,prompt);
     if(!education.allowed){recordTurn(speaker.id,"assistant",education.response);return json({answer:education.response,type:"education_guardrail",fast:true,speakerProfileId:speaker.id});}
     try{
-      const context=buildContext({conversation:recentTurns(speaker.id).slice(-4)});
+      const speakerMemory=memoryService("local-user",speaker.id,{durable:Boolean(env.NYXTHEA_STATE)});
+      const savedReply=explicitMemoryReply(speakerMemory,prompt);
+      if(savedReply){recordTurn(speaker.id,"assistant",savedReply.text);return json({answer:savedReply.text,type:"memory",modelUsed:false,fast:true,speakerProfileId:speaker.id});}
+      const context=buildContext({...conversationContext(speaker.id),speaker:conversationSpeaker(speaker),memories:relevantMemories(speakerMemory,prompt)});
       const response=await Promise.race([
         converseFast(env.AI,prompt,context,conversationPreferences(speaker)),
         new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),8000))
@@ -394,9 +403,10 @@ async function api(request, env, url) {
   if (request.method === "POST" && url.pathname === "/api/memories") { const { text, layer } = await readJson(request); if (typeof text !== "string" || !text.trim() || text.length > 4000) return json({ error: "Memory text must be 1–4000 characters." }, 400); return json({ memory: memory.remember(text, layer), notice: memory.storageNotice }, 201); }
   if (request.method === "DELETE" && url.pathname.startsWith("/api/memories/")) return json({ deleted: memory.forget(url.pathname.split("/").at(-1)) });
   if (request.method === "DELETE" && url.pathname === "/api/memories") return json({ deleted: memory.clear(url.searchParams.get("layer") || undefined) });
+  if (request.method === "DELETE" && url.pathname === "/api/conversation/recent") return json(clearConversation(profile.id));
   if (request.method === "GET" && url.pathname === "/api/conversation/recent") return json({ conversation: recentTurns(profile.id, 24) });
   if (request.method === "POST" && url.pathname === "/api/conversation/state") return json({ state: setConversationState(profile.id, (await readJson(request)).mode) });
-  if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, personality: conversationPreferences(profile), mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
+  if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const savedReply=explicitMemoryReply(memory,message); if(savedReply){recordTurn(profile.id,"assistant",savedReply.text);return json({type:"memory",answer:savedReply.text,modelUsed:false,conversation:recentTurns(profile.id)});} const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: relevantMemories(memory,message), ...conversationContext(profile.id), speaker:conversationSpeaker(profile), authorization: { action: false }, personality: conversationPreferences(profile), mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
   return json({ error: "Not found." }, 404);
 }
 

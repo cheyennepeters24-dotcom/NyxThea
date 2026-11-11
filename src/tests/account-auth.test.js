@@ -481,3 +481,19 @@ test('saved communication style reaches both authenticated conversation routes',
     }
   } finally {env.AI=previousAI;}
 });
+
+test('text and voice explicit memory survives durable reload and chat clearing preserves it',async()=>{
+ resetStateForTests();storage.rows.clear();object=new NyxtheaState({storage},env);
+ const signup=await call('/api/auth/register',{method:'POST',data:{username:'continuity-memory',displayName:'Memory Tester',password:'continuity-memory-password-123'}});
+ const cookie=signup.headers.get('set-cookie').split(';')[0];
+ for(const route of ['/api/chat','/api/voice/chat']){
+  const response=await call(route,{method:'POST',cookie,data:{message:'Please remember that I like blue roses.'}});
+  assert.equal(response.status,200);assert.match((await body(response)).answer,/Saved to your profile/);
+ }
+ object=new NyxtheaState({storage},env);
+ const recall=await call('/api/chat',{method:'POST',cookie,data:{message:'What do you remember about me?'}});
+ assert.match((await body(recall)).answer,/blue roses/);
+ const cleared=await call('/api/conversation/recent',{method:'DELETE',cookie});assert.equal(cleared.status,200);
+ const after=await call('/api/chat',{method:'POST',cookie,data:{message:'What do you remember about me?'}});
+ assert.match((await body(after)).answer,/blue roses/);
+});

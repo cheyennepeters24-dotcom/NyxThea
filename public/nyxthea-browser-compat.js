@@ -1704,18 +1704,18 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _accountSettings.apply(this, arguments);
   }
   function _accountSettings() {
-    _accountSettings = _asyncToGenerator(_regenerator().m(function _callee99() {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, recovery, lockInfo, _yield$Promise$allSet, _yield$Promise$allSet2, recoveryResult, lockResult, selected, moduleChoices, adminAccess, adminButtons, soundMode, decorative, soundNote, recoveryNote, _t76;
-      return _regenerator().w(function (_context99) {
-        while (1) switch (_context99.p = _context99.n) {
+    _accountSettings = _asyncToGenerator(_regenerator().m(function _callee101() {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, recovery, lockInfo, _yield$Promise$allSet, _yield$Promise$allSet2, recoveryResult, lockResult, selected, moduleChoices, adminAccess, adminButtons, soundMode, decorative, soundNote, recoveryNote, _t78;
+      return _regenerator().w(function (_context101) {
+        while (1) switch (_context101.p = _context101.n) {
           case 0:
             recovery = null, lockInfo = null;
-            _context99.n = 1;
+            _context101.n = 1;
             return Promise.allSettled([api("/api/recovery/status", {
               timeoutMs: 6e3
             }), profileLockState()]);
           case 1:
-            _yield$Promise$allSet = _context99.v;
+            _yield$Promise$allSet = _context101.v;
             _yield$Promise$allSet2 = _slicedToArray(_yield$Promise$allSet, 2);
             recoveryResult = _yield$Promise$allSet2[0];
             lockResult = _yield$Promise$allSet2[1];
@@ -1733,21 +1733,21 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               householdAdmin: false,
               systemAdmin: false
             };
-            _context99.p = 2;
-            _context99.n = 3;
+            _context101.p = 2;
+            _context101.n = 3;
             return api("/api/admin/access", {
               timeoutMs: 5e3
             });
           case 3:
-            adminAccess = _context99.v;
-            _context99.n = 5;
+            adminAccess = _context101.v;
+            _context101.n = 5;
             break;
           case 4:
-            _context99.p = 4;
-            _t76 = _context99.v;
+            _context101.p = 4;
+            _t78 = _context101.v;
           case 5:
             adminButtons = '<div class="item"><strong>Administration</strong><p class="small">Household administration and NyxThea system administration are separate permissions.</p>'.concat(adminAccess.householdAdmin ? '<button id="householdAdminBtn" class="secondary">Household Admin</button>' : "").concat(adminAccess.systemAdmin ? '<button id="systemAdminBtn" class="secondary">System Admin</button>' : "", "</div>");
-            panel("Your profile", "<p>Signed in as ".concat(esc(credential.displayName), '.</p><button id="nameSettings" class="primary">Name, birthday and pronunciation</button><button id="meetPerson" class="secondary">Someone new is talking</button><button id="chooseSpeaker" class="secondary">Choose active household speaker</button>').concat(adminButtons, '\n <div class="item"><strong>Security setup</strong><p class="small">').concat(((_b = lockInfo == null ? void 0 : lockInfo.lock) == null ? void 0 : _b.pinEnabled) ? "PIN is set. You can change it here." : "No PIN yet. Create one now, or keep using your account password.", '</p><input id="newProfilePinInline" class="field" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" placeholder="4\u20138 digit PIN"><button id="saveProfilePinInline" class="primary">').concat(((_c = lockInfo == null ? void 0 : lockInfo.lock) == null ? void 0 : _c.pinEnabled) ? "Change PIN" : "Create PIN", '</button><button id="enableBiometricInline" class="secondary">Enable Face ID / Touch ID / passkey</button><p id="securityNote" class="small"></p></div>\n <div class="item"><strong>Change account password</strong><input id="currentAccountPassword" class="field" type="password" autocomplete="current-password" placeholder="Current password"><input id="newAccountPassword" class="field" type="password" autocomplete="new-password" placeholder="New password \u2014 at least 12 characters"><button id="changeAccountPassword" class="secondary">Change password</button><p id="passwordNote" class="small"></p></div>\n <div class="item"><strong>How Nyx talks with you</strong><select id="communicationStyle" class="field"><option value="professional">Professional \u2014 polished and direct</option><option value="natural">Natural \u2014 warm, witty and playful</option><option value="unfiltered">Unfiltered \u2014 adult language, swearing and innuendo</option></select><p class="small">Unfiltered is an adult opt-in for stronger language and playful mature banter. Child profiles stay age appropriate.</p><button id="saveCommunicationStyle" class="primary">Save conversation style</button><p id="communicationNote" class="small" role="status"></p></div>\n <div class="item"><strong>Your interface</strong><p class="small">Choose what Nyx puts on your dashboard. A module can be visible even before its external provider is connected.</p><div class="nyx-choice">').concat(moduleChoices, '</div><button id="saveInterfaceModules" class="primary">Save my interface</button><p id="interfaceNote" class="small"></p></div>\n <div class="item"><strong>Voice activation</strong><label class="choice"><input id="voiceEnabled" type="checkbox" ').concat(((_d = NYXExperience.settings) == null ? void 0 : _d.voiceEnabled) !== false ? "checked" : "", '> Allow voice interaction</label><label class="choice"><input id="handsFreeEnabled" type="checkbox" ').concat(((_e = NYXExperience.settings) == null ? void 0 : _e.handsFreeEnabled) ? "checked" : "", '> Wake by <strong>Nyx</strong> while this page is open</label><p class="small">NyxThea and Nixie are conversational names; the wake word is always Nyx.</p><p class="small">').concat(NYXExperience.wakeEnrollmentReady() ? "Nyx is taught on this device." : "This device still needs the 5-sample Nyx setup.", '</p><button id="teachNyx" class="secondary">').concat(NYXExperience.wakeEnrollmentReady() ? "Re-teach Nyx on this device" : "Teach Nyx my voice", '</button><button id="exportNyxSamples" class="secondary">Export Nyx training samples</button><button id="clearNyxSamples" class="secondary">Delete local Nyx training samples</button><p id="wakeSampleNote" class="small">Checking local samples\u2026</p><p id="voiceNote" class="small"></p></div>\n <div class="item"><strong>Interface sounds</strong><select id="soundMode" class="field"><option value="off">Off</option><option value="minimal">Minimal</option><option value="full">Full</option></select><label class="choice"><input id="decorativeSounds" type="checkbox"> Allow decorative interface sounds</label><button id="testSound" class="secondary">Preview Nyx sound</button><p id="soundNote" class="small"></p></div>\n <div class="item"><strong>Recovery email</strong><input id="recoveryEmail" class="field" type="email" placeholder="Recovery email"><button id="sendRecoveryVerify" class="secondary">Send verification code</button><input id="recoveryEmailCode" class="field" inputmode="numeric" maxlength="6" placeholder="6-digit verification code"><button id="confirmRecoveryEmail" class="secondary">Verify recovery email</button><button id="reverifyRecoveryEmail" class="secondary" style="display:none">Verify adult access again</button><p id="recoveryEmailNote" class="small"></p></div><button id="signOut" class="secondary">Sign out</button>'));
+            panel("Your profile", "<p>Signed in as ".concat(esc(credential.displayName), '.</p><button id="nameSettings" class="primary">Name, birthday and pronunciation</button><button id="meetPerson" class="secondary">Someone new is talking</button><button id="chooseSpeaker" class="secondary">Choose active household speaker</button>').concat(adminButtons, '\n <div class="item"><strong>Security setup</strong><p class="small">').concat(((_b = lockInfo == null ? void 0 : lockInfo.lock) == null ? void 0 : _b.pinEnabled) ? "PIN is set. You can change it here." : "No PIN yet. Create one now, or keep using your account password.", '</p><input id="newProfilePinInline" class="field" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" placeholder="4\u20138 digit PIN"><button id="saveProfilePinInline" class="primary">').concat(((_c = lockInfo == null ? void 0 : lockInfo.lock) == null ? void 0 : _c.pinEnabled) ? "Change PIN" : "Create PIN", '</button><button id="enableBiometricInline" class="secondary">Enable Face ID / Touch ID / passkey</button><p id="securityNote" class="small"></p></div>\n <div class="item"><strong>Change account password</strong><input id="currentAccountPassword" class="field" type="password" autocomplete="current-password" placeholder="Current password"><input id="newAccountPassword" class="field" type="password" autocomplete="new-password" placeholder="New password \u2014 at least 12 characters"><button id="changeAccountPassword" class="secondary">Change password</button><p id="passwordNote" class="small"></p></div>\n <div class="item"><strong>How Nyx talks with you</strong><select id="communicationStyle" class="field"><option value="professional">Professional \u2014 polished and direct</option><option value="natural">Natural \u2014 warm, witty and playful</option><option value="unfiltered">Unfiltered \u2014 adult language, swearing and innuendo</option></select><p class="small">Unfiltered is an adult opt-in for stronger language and playful mature banter. Child profiles stay age appropriate.</p><button id="saveCommunicationStyle" class="primary">Save conversation style</button><p id="communicationNote" class="small" role="status"></p></div>\n <div class="item"><strong>Your interface</strong><p class="small">Choose what Nyx puts on your dashboard. A module can be visible even before its external provider is connected.</p><div class="nyx-choice">').concat(moduleChoices, '</div><button id="saveInterfaceModules" class="primary">Save my interface</button><p id="interfaceNote" class="small"></p></div>\n <div class="item"><strong>Conversation continuity</strong><p class="small">Nyx uses recent messages and compact excerpts from the last 24 hours to keep the thread. This does not add permanent memories. Saved memories remain separate and under your control.</p><button id="clearConversation" class="secondary">Clear this profile\u2019s conversation history</button><p id="continuityNote" class="small" role="status"></p></div>\n <div class="item"><strong>Speaking voice</strong><select id="voiceOutputMode" class="field"><option value="device">Device voice \u2014 prefer a British voice, no Cloudflare speech usage</option><option value="cloud">Cloud voice \u2014 uses the shared AI allowance</option></select><p class="small">Device voice availability and quality depend on this device. Speech recognition may still use a browser or cloud service.</p><p id="voiceOutputNote" class="small" role="status"></p></div>\n <div class="item"><strong>Voice activation</strong><label class="choice"><input id="voiceEnabled" type="checkbox" ').concat(((_d = NYXExperience.settings) == null ? void 0 : _d.voiceEnabled) !== false ? "checked" : "", '> Allow voice interaction</label><label class="choice"><input id="handsFreeEnabled" type="checkbox" ').concat(((_e = NYXExperience.settings) == null ? void 0 : _e.handsFreeEnabled) ? "checked" : "", '> Wake by <strong>Nyx</strong> while this page is open</label><p class="small">NyxThea and Nixie are conversational names; the wake word is always Nyx.</p><p class="small">').concat(NYXExperience.wakeEnrollmentReady() ? "Nyx is taught on this device." : "This device still needs the 5-sample Nyx setup.", '</p><button id="teachNyx" class="secondary">').concat(NYXExperience.wakeEnrollmentReady() ? "Re-teach Nyx on this device" : "Teach Nyx my voice", '</button><button id="exportNyxSamples" class="secondary">Export Nyx training samples</button><button id="clearNyxSamples" class="secondary">Delete local Nyx training samples</button><p id="wakeSampleNote" class="small">Checking local samples\u2026</p><p id="voiceNote" class="small"></p></div>\n <div class="item"><strong>Interface sounds</strong><select id="soundMode" class="field"><option value="off">Off</option><option value="minimal">Minimal</option><option value="full">Full</option></select><label class="choice"><input id="decorativeSounds" type="checkbox"> Allow decorative interface sounds</label><button id="testSound" class="secondary">Preview Nyx sound</button><p id="soundNote" class="small"></p></div>\n <div class="item"><strong>Recovery email</strong><input id="recoveryEmail" class="field" type="email" placeholder="Recovery email"><button id="sendRecoveryVerify" class="secondary">Send verification code</button><input id="recoveryEmailCode" class="field" inputmode="numeric" maxlength="6" placeholder="6-digit verification code"><button id="confirmRecoveryEmail" class="secondary">Verify recovery email</button><button id="reverifyRecoveryEmail" class="secondary" style="display:none">Verify adult access again</button><p id="recoveryEmailNote" class="small"></p></div><button id="signOut" class="secondary">Sign out</button>'));
             $("#nameSettings").onclick = function () {
               return NYXExperience.onboard(true);
             };
@@ -1840,57 +1840,112 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 }
               }, _callee82, null, [[0, 2]]);
             }));
-            $("#communicationStyle").value = ((_f = NYXExperience.settings) == null ? void 0 : _f.communicationStyle) || "natural";
-            $("#saveCommunicationStyle").onclick = _asyncToGenerator(_regenerator().m(function _callee83() {
-              var note, _t64;
+            $("#voiceOutputMode").value = ((_f = NYXExperience.settings) == null ? void 0 : _f.voiceOutputMode) || "device";
+            $("#voiceOutputMode").onchange = _asyncToGenerator(_regenerator().m(function _callee83() {
+              var _t64;
               return _regenerator().w(function (_context83) {
                 while (1) switch (_context83.p = _context83.n) {
                   case 0:
+                    _context83.p = 0;
+                    _context83.n = 1;
+                    return NYXExperience.save({
+                      voiceOutputMode: $("#voiceOutputMode").value
+                    });
+                  case 1:
+                    $("#voiceOutputNote").textContent = "Speaking voice saved.";
+                    _context83.n = 3;
+                    break;
+                  case 2:
+                    _context83.p = 2;
+                    _t64 = _context83.v;
+                    $("#voiceOutputNote").textContent = _t64.message;
+                  case 3:
+                    return _context83.a(2);
+                }
+              }, _callee83, null, [[0, 2]]);
+            }));
+            $("#clearConversation").onclick = _asyncToGenerator(_regenerator().m(function _callee84() {
+              var _t65;
+              return _regenerator().w(function (_context84) {
+                while (1) switch (_context84.p = _context84.n) {
+                  case 0:
+                    if (confirm("Clear this profile\u2019s chat history? Saved memories will stay.")) {
+                      _context84.n = 1;
+                      break;
+                    }
+                    return _context84.a(2);
+                  case 1:
+                    _context84.p = 1;
+                    _context84.n = 2;
+                    return api("/api/conversation/recent", {
+                      method: "DELETE"
+                    });
+                  case 2:
+                    invalidateConversationRequests();
+                    conversationHistory = [];
+                    $("#continuityNote").textContent = "Conversation history cleared. Saved memories kept.";
+                    _context84.n = 4;
+                    break;
+                  case 3:
+                    _context84.p = 3;
+                    _t65 = _context84.v;
+                    $("#continuityNote").textContent = _t65.message;
+                  case 4:
+                    return _context84.a(2);
+                }
+              }, _callee84, null, [[1, 3]]);
+            }));
+            $("#communicationStyle").value = ((_g = NYXExperience.settings) == null ? void 0 : _g.communicationStyle) || "natural";
+            $("#saveCommunicationStyle").onclick = _asyncToGenerator(_regenerator().m(function _callee85() {
+              var note, _t66;
+              return _regenerator().w(function (_context85) {
+                while (1) switch (_context85.p = _context85.n) {
+                  case 0:
                     note = $("#communicationNote");
-                    _context83.p = 1;
-                    _context83.n = 2;
+                    _context85.p = 1;
+                    _context85.n = 2;
                     return NYXExperience.save({
                       communicationStyle: $("#communicationStyle").value
                     });
                   case 2:
                     $("#communicationStyle").value = NYXExperience.settings.communicationStyle;
                     note.textContent = NYXExperience.settings.communicationStyle === "unfiltered" ? "Adult language and playful mature banter enabled for this profile." : "Conversation style saved.";
-                    _context83.n = 4;
+                    _context85.n = 4;
                     break;
                   case 3:
-                    _context83.p = 3;
-                    _t64 = _context83.v;
-                    note.textContent = _t64.message;
+                    _context85.p = 3;
+                    _t66 = _context85.v;
+                    note.textContent = _t66.message;
                   case 4:
-                    return _context83.a(2);
+                    return _context85.a(2);
                 }
-              }, _callee83, null, [[1, 3]]);
+              }, _callee85, null, [[1, 3]]);
             }));
-            $("#saveProfilePinInline").onclick = _asyncToGenerator(_regenerator().m(function _callee84() {
-              var note, pin, _t65;
-              return _regenerator().w(function (_context84) {
-                while (1) switch (_context84.p = _context84.n) {
+            $("#saveProfilePinInline").onclick = _asyncToGenerator(_regenerator().m(function _callee86() {
+              var note, pin, _t67;
+              return _regenerator().w(function (_context86) {
+                while (1) switch (_context86.p = _context86.n) {
                   case 0:
                     note = $("#securityNote");
-                    _context84.n = 1;
+                    _context86.n = 1;
                     return ensureSettingsAuthorization(note);
                   case 1:
-                    if (_context84.v) {
-                      _context84.n = 2;
+                    if (_context86.v) {
+                      _context86.n = 2;
                       break;
                     }
-                    return _context84.a(2);
+                    return _context86.a(2);
                   case 2:
                     pin = $("#newProfilePinInline").value.trim();
                     if (/^\d{4,8}$/.test(pin)) {
-                      _context84.n = 3;
+                      _context86.n = 3;
                       break;
                     }
                     note.textContent = "Enter a 4\u20138 digit PIN. Leading zeroes are allowed.";
-                    return _context84.a(2);
+                    return _context86.a(2);
                   case 3:
-                    _context84.p = 3;
-                    _context84.n = 4;
+                    _context86.p = 3;
+                    _context86.n = 4;
                     return api("/api/profile-lock/pin", {
                       method: "POST",
                       settingsAuth: true,
@@ -1902,55 +1957,55 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                     });
                   case 4:
                     note.textContent = "PIN saved. This device stays unlocked.";
-                    _context84.n = 6;
+                    _context86.n = 6;
                     break;
                   case 5:
-                    _context84.p = 5;
-                    _t65 = _context84.v;
-                    note.textContent = _t65.message;
+                    _context86.p = 5;
+                    _t67 = _context86.v;
+                    note.textContent = _t67.message;
                   case 6:
-                    return _context84.a(2);
+                    return _context86.a(2);
                 }
-              }, _callee84, null, [[3, 5]]);
+              }, _callee86, null, [[3, 5]]);
             }));
-            $("#enableBiometricInline").onclick = _asyncToGenerator(_regenerator().m(function _callee85() {
+            $("#enableBiometricInline").onclick = _asyncToGenerator(_regenerator().m(function _callee87() {
               var note;
-              return _regenerator().w(function (_context85) {
-                while (1) switch (_context85.n) {
+              return _regenerator().w(function (_context87) {
+                while (1) switch (_context87.n) {
                   case 0:
                     note = $("#securityNote");
                     if (settingsAuthToken) {
-                      _context85.n = 1;
+                      _context87.n = 1;
                       break;
                     }
                     note.textContent = "Verify your account password or PIN first, then enable Face ID / Touch ID.";
-                    return _context85.a(2);
+                    return _context87.a(2);
                   case 1:
-                    _context85.n = 2;
+                    _context87.n = 2;
                     return setupDeviceBiometric();
                   case 2:
-                    return _context85.a(2);
+                    return _context87.a(2);
                 }
-              }, _callee85);
+              }, _callee87);
             }));
-            $("#changeAccountPassword").onclick = _asyncToGenerator(_regenerator().m(function _callee86() {
-              var note, currentPassword, newPassword, _t66;
-              return _regenerator().w(function (_context86) {
-                while (1) switch (_context86.p = _context86.n) {
+            $("#changeAccountPassword").onclick = _asyncToGenerator(_regenerator().m(function _callee88() {
+              var note, currentPassword, newPassword, _t68;
+              return _regenerator().w(function (_context88) {
+                while (1) switch (_context88.p = _context88.n) {
                   case 0:
                     note = $("#passwordNote");
-                    _context86.n = 1;
+                    _context88.n = 1;
                     return ensureSettingsAuthorization(note);
                   case 1:
-                    if (_context86.v) {
-                      _context86.n = 2;
+                    if (_context88.v) {
+                      _context88.n = 2;
                       break;
                     }
-                    return _context86.a(2);
+                    return _context88.a(2);
                   case 2:
                     currentPassword = $("#currentAccountPassword").value, newPassword = $("#newAccountPassword").value;
-                    _context86.p = 3;
-                    _context86.n = 4;
+                    _context88.p = 3;
+                    _context88.n = 4;
                     return api("/api/settings/change-password", {
                       method: "POST",
                       settingsAuth: true,
@@ -1962,52 +2017,52 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                     });
                   case 4:
                     note.textContent = "Password changed. This device remains signed in.";
-                    _context86.n = 6;
+                    _context88.n = 6;
                     break;
                   case 5:
-                    _context86.p = 5;
-                    _t66 = _context86.v;
-                    note.textContent = _t66.message;
+                    _context88.p = 5;
+                    _t68 = _context88.v;
+                    note.textContent = _t68.message;
                   case 6:
-                    return _context86.a(2);
+                    return _context88.a(2);
                 }
-              }, _callee86, null, [[3, 5]]);
+              }, _callee88, null, [[3, 5]]);
             }));
-            $("#saveInterfaceModules").onclick = _asyncToGenerator(_regenerator().m(function _callee87() {
-              var visible, _t67;
-              return _regenerator().w(function (_context87) {
-                while (1) switch (_context87.p = _context87.n) {
+            $("#saveInterfaceModules").onclick = _asyncToGenerator(_regenerator().m(function _callee89() {
+              var visible, _t69;
+              return _regenerator().w(function (_context89) {
+                while (1) switch (_context89.p = _context89.n) {
                   case 0:
                     visible = $$("[data-module-choice]:checked").map(function (x) {
                       return x.dataset.moduleChoice;
                     });
-                    _context87.p = 1;
-                    _context87.n = 2;
+                    _context89.p = 1;
+                    _context89.n = 2;
                     return NYXExperience.save({
                       visibleModules: visible
                     });
                   case 2:
                     applyInterfacePreferences();
                     $("#interfaceNote").textContent = "Your interface is updated.";
-                    _context87.n = 4;
+                    _context89.n = 4;
                     break;
                   case 3:
-                    _context87.p = 3;
-                    _t67 = _context87.v;
-                    $("#interfaceNote").textContent = _t67.message;
+                    _context89.p = 3;
+                    _t69 = _context89.v;
+                    $("#interfaceNote").textContent = _t69.message;
                   case 4:
-                    return _context87.a(2);
+                    return _context89.a(2);
                 }
-              }, _callee87, null, [[1, 3]]);
+              }, _callee89, null, [[1, 3]]);
             }));
             $("#voiceEnabled").onchange = function () {
-              var _ref43 = _asyncToGenerator(_regenerator().m(function _callee88(e) {
-                var _t68;
-                return _regenerator().w(function (_context88) {
-                  while (1) switch (_context88.p = _context88.n) {
+              var _ref45 = _asyncToGenerator(_regenerator().m(function _callee90(e) {
+                var _t70;
+                return _regenerator().w(function (_context90) {
+                  while (1) switch (_context90.p = _context90.n) {
                     case 0:
-                      _context88.p = 0;
-                      _context88.n = 1;
+                      _context90.p = 0;
+                      _context90.n = 1;
                       return NYXExperience.save({
                         voiceEnabled: e.target.checked
                       });
@@ -2017,229 +2072,229 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                         NYXVoice.stop();
                       }
                       $("#voiceNote").textContent = "Voice preference saved.";
-                      _context88.n = 3;
+                      _context90.n = 3;
                       break;
                     case 2:
-                      _context88.p = 2;
-                      _t68 = _context88.v;
-                      $("#voiceNote").textContent = _t68.message;
+                      _context90.p = 2;
+                      _t70 = _context90.v;
+                      $("#voiceNote").textContent = _t70.message;
                     case 3:
-                      return _context88.a(2);
+                      return _context90.a(2);
                   }
-                }, _callee88, null, [[0, 2]]);
+                }, _callee90, null, [[0, 2]]);
               }));
               return function (_x16) {
-                return _ref43.apply(this, arguments);
+                return _ref45.apply(this, arguments);
               };
             }();
-            $("#teachNyx").onclick = _asyncToGenerator(_regenerator().m(function _callee89() {
+            $("#teachNyx").onclick = _asyncToGenerator(_regenerator().m(function _callee91() {
               var ok;
-              return _regenerator().w(function (_context89) {
-                while (1) switch (_context89.n) {
+              return _regenerator().w(function (_context91) {
+                while (1) switch (_context91.n) {
                   case 0:
-                    _context89.n = 1;
+                    _context91.n = 1;
                     return NYXExperience.enrollWakeWord({
                       returnToSettings: true
                     });
                   case 1:
-                    ok = _context89.v;
+                    ok = _context91.v;
                     if (ok) $("#voiceNote").textContent = "Nyx is ready on this device.";
                   case 2:
-                    return _context89.a(2);
+                    return _context91.a(2);
                 }
-              }, _callee89);
+              }, _callee91);
             }));
             void NYXWakeTraining.count().then(function (count) {
               var note = $("#wakeSampleNote");
               if (note) note.textContent = count ? "".concat(count, " local Nyx training sample").concat(count === 1 ? "" : "s", " stored on this device.") : "No local Nyx training samples stored yet.";
             });
-            $("#exportNyxSamples").onclick = _asyncToGenerator(_regenerator().m(function _callee90() {
-              var note, count, _t69;
-              return _regenerator().w(function (_context90) {
-                while (1) switch (_context90.p = _context90.n) {
+            $("#exportNyxSamples").onclick = _asyncToGenerator(_regenerator().m(function _callee92() {
+              var note, count, _t71;
+              return _regenerator().w(function (_context92) {
+                while (1) switch (_context92.p = _context92.n) {
                   case 0:
                     note = $("#wakeSampleNote");
-                    _context90.p = 1;
-                    _context90.n = 2;
+                    _context92.p = 1;
+                    _context92.n = 2;
                     return NYXWakeTraining.count();
                   case 2:
-                    count = _context90.v;
+                    count = _context92.v;
                     if (count) {
-                      _context90.n = 3;
+                      _context92.n = 3;
                       break;
                     }
                     note.textContent = "There are no local Nyx samples to export yet.";
-                    return _context90.a(2);
+                    return _context92.a(2);
                   case 3:
-                    _context90.n = 4;
+                    _context92.n = 4;
                     return NYXWakeTraining.export();
                   case 4:
                     note.textContent = "Exported ".concat(count, " local Nyx training samples.");
-                    _context90.n = 6;
+                    _context92.n = 6;
                     break;
                   case 5:
-                    _context90.p = 5;
-                    _t69 = _context90.v;
-                    note.textContent = _t69.message;
+                    _context92.p = 5;
+                    _t71 = _context92.v;
+                    note.textContent = _t71.message;
                   case 6:
-                    return _context90.a(2);
+                    return _context92.a(2);
                 }
-              }, _callee90, null, [[1, 5]]);
+              }, _callee92, null, [[1, 5]]);
             }));
-            $("#clearNyxSamples").onclick = _asyncToGenerator(_regenerator().m(function _callee91() {
-              var note, _t70;
-              return _regenerator().w(function (_context91) {
-                while (1) switch (_context91.p = _context91.n) {
+            $("#clearNyxSamples").onclick = _asyncToGenerator(_regenerator().m(function _callee93() {
+              var note, _t72;
+              return _regenerator().w(function (_context93) {
+                while (1) switch (_context93.p = _context93.n) {
                   case 0:
                     note = $("#wakeSampleNote");
-                    _context91.p = 1;
-                    _context91.n = 2;
+                    _context93.p = 1;
+                    _context93.n = 2;
                     return NYXWakeTraining.clear();
                   case 2:
                     note.textContent = "Local Nyx training samples deleted from this device.";
-                    _context91.n = 4;
+                    _context93.n = 4;
                     break;
                   case 3:
-                    _context91.p = 3;
-                    _t70 = _context91.v;
-                    note.textContent = _t70.message;
+                    _context93.p = 3;
+                    _t72 = _context93.v;
+                    note.textContent = _t72.message;
                   case 4:
-                    return _context91.a(2);
+                    return _context93.a(2);
                 }
-              }, _callee91, null, [[1, 3]]);
+              }, _callee93, null, [[1, 3]]);
             }));
             $("#handsFreeEnabled").onchange = function () {
-              var _ref47 = _asyncToGenerator(_regenerator().m(function _callee92(e) {
-                var note, ok, _t71;
-                return _regenerator().w(function (_context92) {
-                  while (1) switch (_context92.p = _context92.n) {
+              var _ref49 = _asyncToGenerator(_regenerator().m(function _callee94(e) {
+                var note, ok, _t73;
+                return _regenerator().w(function (_context94) {
+                  while (1) switch (_context94.p = _context94.n) {
                     case 0:
                       note = $("#voiceNote");
                       if (!(e.target.checked && !NYXExperience.wakeEnrollmentReady())) {
-                        _context92.n = 2;
+                        _context94.n = 2;
                         break;
                       }
                       note.textContent = "Teach Nyx your voice first.";
-                      _context92.n = 1;
+                      _context94.n = 1;
                       return NYXExperience.enrollWakeWord({
                         returnToSettings: true
                       });
                     case 1:
-                      ok = _context92.v;
+                      ok = _context94.v;
                       if (ok) {
-                        _context92.n = 2;
+                        _context94.n = 2;
                         break;
                       }
                       e.target.checked = false;
-                      return _context92.a(2);
+                      return _context94.a(2);
                     case 2:
                       if (e.target.checked) NYXHandsFree.start();else NYXHandsFree.stop();
-                      _context92.p = 3;
-                      _context92.n = 4;
+                      _context94.p = 3;
+                      _context94.n = 4;
                       return NYXExperience.save({
                         handsFreeEnabled: e.target.checked,
                         handsFreeConfigured: true
                       });
                     case 4:
                       note.textContent = e.target.checked ? "Wake-by-Nyx saved." : "Wake-by-Nyx turned off.";
-                      _context92.n = 6;
+                      _context94.n = 6;
                       break;
                     case 5:
-                      _context92.p = 5;
-                      _t71 = _context92.v;
-                      note.textContent = _t71.message;
+                      _context94.p = 5;
+                      _t73 = _context94.v;
+                      note.textContent = _t73.message;
                     case 6:
-                      return _context92.a(2);
+                      return _context94.a(2);
                   }
-                }, _callee92, null, [[3, 5]]);
+                }, _callee94, null, [[3, 5]]);
               }));
               return function (_x17) {
-                return _ref47.apply(this, arguments);
+                return _ref49.apply(this, arguments);
               };
             }();
             soundMode = $("#soundMode"), decorative = $("#decorativeSounds"), soundNote = $("#soundNote");
-            soundMode.value = ((_g = NYXExperience.settings) == null ? void 0 : _g.soundMode) || "minimal";
-            decorative.checked = ((_h = NYXExperience.settings) == null ? void 0 : _h.decorativeSounds) !== false;
-            soundMode.onchange = _asyncToGenerator(_regenerator().m(function _callee93() {
-              var _t72;
-              return _regenerator().w(function (_context93) {
-                while (1) switch (_context93.p = _context93.n) {
+            soundMode.value = ((_h = NYXExperience.settings) == null ? void 0 : _h.soundMode) || "minimal";
+            decorative.checked = ((_i = NYXExperience.settings) == null ? void 0 : _i.decorativeSounds) !== false;
+            soundMode.onchange = _asyncToGenerator(_regenerator().m(function _callee95() {
+              var _t74;
+              return _regenerator().w(function (_context95) {
+                while (1) switch (_context95.p = _context95.n) {
                   case 0:
-                    _context93.p = 0;
-                    _context93.n = 1;
+                    _context95.p = 0;
+                    _context95.n = 1;
                     return NYXExperience.save({
                       soundMode: soundMode.value
                     });
                   case 1:
                     soundNote.textContent = "Sound mode saved.";
-                    _context93.n = 3;
+                    _context95.n = 3;
                     break;
                   case 2:
-                    _context93.p = 2;
-                    _t72 = _context93.v;
-                    soundNote.textContent = _t72.message;
+                    _context95.p = 2;
+                    _t74 = _context95.v;
+                    soundNote.textContent = _t74.message;
                   case 3:
-                    return _context93.a(2);
+                    return _context95.a(2);
                 }
-              }, _callee93, null, [[0, 2]]);
+              }, _callee95, null, [[0, 2]]);
             }));
-            decorative.onchange = _asyncToGenerator(_regenerator().m(function _callee94() {
-              var _t73;
-              return _regenerator().w(function (_context94) {
-                while (1) switch (_context94.p = _context94.n) {
+            decorative.onchange = _asyncToGenerator(_regenerator().m(function _callee96() {
+              var _t75;
+              return _regenerator().w(function (_context96) {
+                while (1) switch (_context96.p = _context96.n) {
                   case 0:
-                    _context94.p = 0;
-                    _context94.n = 1;
+                    _context96.p = 0;
+                    _context96.n = 1;
                     return NYXExperience.save({
                       decorativeSounds: decorative.checked
                     });
                   case 1:
                     soundNote.textContent = "Sound preference saved.";
-                    _context94.n = 3;
+                    _context96.n = 3;
                     break;
                   case 2:
-                    _context94.p = 2;
-                    _t73 = _context94.v;
-                    soundNote.textContent = _t73.message;
+                    _context96.p = 2;
+                    _t75 = _context96.v;
+                    soundNote.textContent = _t75.message;
                   case 3:
-                    return _context94.a(2);
+                    return _context96.a(2);
                 }
-              }, _callee94, null, [[0, 2]]);
+              }, _callee96, null, [[0, 2]]);
             }));
-            $("#testSound").onclick = _asyncToGenerator(_regenerator().m(function _callee95() {
-              return _regenerator().w(function (_context95) {
-                while (1) switch (_context95.n) {
+            $("#testSound").onclick = _asyncToGenerator(_regenerator().m(function _callee97() {
+              return _regenerator().w(function (_context97) {
+                while (1) switch (_context97.n) {
                   case 0:
-                    _context95.n = 1;
+                    _context97.n = 1;
                     return NYXSound.prime();
                   case 1:
                     NYXSound.cue("startup");
                   case 2:
-                    return _context95.a(2);
+                    return _context97.a(2);
                 }
-              }, _callee95);
+              }, _callee97);
             }));
             recoveryNote = $("#recoveryEmailNote");
-            if ((_i = recovery == null ? void 0 : recovery.recovery) == null ? void 0 : _i.recoveryEmailVerified) {
+            if ((_j = recovery == null ? void 0 : recovery.recovery) == null ? void 0 : _j.recoveryEmailVerified) {
               $("#recoveryEmail").value = recovery.recovery.recoveryEmail || "";
               recoveryNote.textContent = "Verified recovery email is active.";
             } else if (recovery && !recovery.emailDeliveryConfigured) recoveryNote.textContent = "Recovery email delivery is not configured yet; your saved recovery code still works.";
-            $("#sendRecoveryVerify").onclick = _asyncToGenerator(_regenerator().m(function _callee96() {
-              var d, _t74;
-              return _regenerator().w(function (_context96) {
-                while (1) switch (_context96.p = _context96.n) {
+            $("#sendRecoveryVerify").onclick = _asyncToGenerator(_regenerator().m(function _callee98() {
+              var d, _t76;
+              return _regenerator().w(function (_context98) {
+                while (1) switch (_context98.p = _context98.n) {
                   case 0:
-                    _context96.n = 1;
+                    _context98.n = 1;
                     return ensureSettingsAuthorization(recoveryNote);
                   case 1:
-                    if (_context96.v) {
-                      _context96.n = 2;
+                    if (_context98.v) {
+                      _context98.n = 2;
                       break;
                     }
-                    return _context96.a(2);
+                    return _context98.a(2);
                   case 2:
-                    _context96.p = 2;
-                    _context96.n = 3;
+                    _context98.p = 2;
+                    _context98.n = 3;
                     return api("/api/recovery/email/start", {
                       method: "POST",
                       settingsAuth: true,
@@ -2249,46 +2304,46 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                       })
                     });
                   case 3:
-                    d = _context96.v;
+                    d = _context98.v;
                     recoveryNote.textContent = d.sent ? "Verification code sent. Verify adult access again before confirming the code." : "Could not send verification email.";
                     if (d.sent) $("#reverifyRecoveryEmail").style.display = "";
-                    _context96.n = 5;
+                    _context98.n = 5;
                     break;
                   case 4:
-                    _context96.p = 4;
-                    _t74 = _context96.v;
-                    recoveryNote.textContent = _t74.message;
+                    _context98.p = 4;
+                    _t76 = _context98.v;
+                    recoveryNote.textContent = _t76.message;
                   case 5:
-                    return _context96.a(2);
+                    return _context98.a(2);
                 }
-              }, _callee96, null, [[2, 4]]);
+              }, _callee98, null, [[2, 4]]);
             }));
-            $("#reverifyRecoveryEmail").onclick = _asyncToGenerator(_regenerator().m(function _callee97() {
-              return _regenerator().w(function (_context97) {
-                while (1) switch (_context97.n) {
+            $("#reverifyRecoveryEmail").onclick = _asyncToGenerator(_regenerator().m(function _callee99() {
+              return _regenerator().w(function (_context99) {
+                while (1) switch (_context99.n) {
                   case 0:
-                    _context97.n = 1;
+                    _context99.n = 1;
                     return refreshSettingsAuthorization();
                   case 1:
-                    return _context97.a(2);
+                    return _context99.a(2);
                 }
-              }, _callee97);
+              }, _callee99);
             }));
-            $("#confirmRecoveryEmail").onclick = _asyncToGenerator(_regenerator().m(function _callee98() {
-              var _t75;
-              return _regenerator().w(function (_context98) {
-                while (1) switch (_context98.p = _context98.n) {
+            $("#confirmRecoveryEmail").onclick = _asyncToGenerator(_regenerator().m(function _callee100() {
+              var _t77;
+              return _regenerator().w(function (_context100) {
+                while (1) switch (_context100.p = _context100.n) {
                   case 0:
                     if (settingsAuthToken) {
-                      _context98.n = 1;
+                      _context100.n = 1;
                       break;
                     }
                     recoveryNote.textContent = "Verify adult access again before confirming the recovery email.";
                     $("#reverifyRecoveryEmail").style.display = "";
-                    return _context98.a(2);
+                    return _context100.a(2);
                   case 1:
-                    _context98.p = 1;
-                    _context98.n = 2;
+                    _context100.p = 1;
+                    _context100.n = 2;
                     return api("/api/recovery/email/confirm", {
                       method: "POST",
                       settingsAuth: true,
@@ -2299,22 +2354,22 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                     });
                   case 2:
                     recoveryNote.textContent = "Recovery email verified.";
-                    _context98.n = 4;
+                    _context100.n = 4;
                     break;
                   case 3:
-                    _context98.p = 3;
-                    _t75 = _context98.v;
-                    recoveryNote.textContent = _t75.message;
+                    _context100.p = 3;
+                    _t77 = _context100.v;
+                    recoveryNote.textContent = _t77.message;
                   case 4:
-                    return _context98.a(2);
+                    return _context100.a(2);
                 }
-              }, _callee98, null, [[1, 3]]);
+              }, _callee100, null, [[1, 3]]);
             }));
             $("#signOut").onclick = signOut;
           case 6:
-            return _context99.a(2);
+            return _context101.a(2);
         }
-      }, _callee99, null, [[2, 4]]);
+      }, _callee101, null, [[2, 4]]);
     }));
     return _accountSettings.apply(this, arguments);
   }
@@ -2333,36 +2388,36 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _speak.apply(this, arguments);
   }
   function _speak() {
-    _speak = _asyncToGenerator(_regenerator().m(function _callee100(text) {
-      var _a, _b, _c, name, phonetic, spoken, _t77;
-      return _regenerator().w(function (_context100) {
-        while (1) switch (_context100.n) {
+    _speak = _asyncToGenerator(_regenerator().m(function _callee102(text) {
+      var _a, _b, _c, name, phonetic, spoken, _t79;
+      return _regenerator().w(function (_context102) {
+        while (1) switch (_context102.n) {
           case 0:
             if (!(((_a = NYXExperience.settings) == null ? void 0 : _a.voiceEnabled) === false)) {
-              _context100.n = 1;
+              _context102.n = 1;
               break;
             }
-            return _context100.a(2, false);
+            return _context102.a(2, false);
           case 1:
             name = (_b = NYXExperience.settings) == null ? void 0 : _b.preferredName, phonetic = (_c = NYXExperience.settings) == null ? void 0 : _c.pronunciation;
             spoken = String(text || "");
             if (name && phonetic) spoken = spoken.replaceAll(name, phonetic);
             if (!window.NYXVoice) {
-              _context100.n = 3;
+              _context102.n = 3;
               break;
             }
-            _context100.n = 2;
+            _context102.n = 2;
             return NYXVoice.say(spoken);
           case 2:
-            _t77 = _context100.v;
-            _context100.n = 4;
+            _t79 = _context102.v;
+            _context102.n = 4;
             break;
           case 3:
-            _t77 = false;
+            _t79 = false;
           case 4:
-            return _context100.a(2, _t77);
+            return _context102.a(2, _t79);
         }
-      }, _callee100);
+      }, _callee102);
     }));
     return _speak.apply(this, arguments);
   }
@@ -2370,10 +2425,10 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _send.apply(this, arguments);
   }
   function _send() {
-    _send = _asyncToGenerator(_regenerator().m(function _callee101() {
+    _send = _asyncToGenerator(_regenerator().m(function _callee103() {
       var m,
-        _ref54,
-        _ref54$voiceTurn,
+        _ref56,
+        _ref56$voiceTurn,
         voiceTurn,
         epoch,
         profileId,
@@ -2382,28 +2437,30 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
         _step9,
         c,
         answer,
+        quietReply,
         d,
         reply,
+        _reply,
         spoken,
-        _args101 = arguments,
-        _t78;
-      return _regenerator().w(function (_context101) {
-        while (1) switch (_context101.p = _context101.n) {
+        _args103 = arguments,
+        _t80;
+      return _regenerator().w(function (_context103) {
+        while (1) switch (_context103.p = _context103.n) {
           case 0:
-            m = _args101.length > 0 && _args101[0] !== undefined ? _args101[0] : input.value.trim();
-            _ref54 = _args101.length > 1 && _args101[1] !== undefined ? _args101[1] : {}, _ref54$voiceTurn = _ref54.voiceTurn, voiceTurn = _ref54$voiceTurn === void 0 ? false : _ref54$voiceTurn;
+            m = _args103.length > 0 && _args103[0] !== undefined ? _args103[0] : input.value.trim();
+            _ref56 = _args103.length > 1 && _args103[1] !== undefined ? _args103[1] : {}, _ref56$voiceTurn = _ref56.voiceTurn, voiceTurn = _ref56$voiceTurn === void 0 ? false : _ref56$voiceTurn;
             if (m) {
-              _context101.n = 1;
+              _context103.n = 1;
               break;
             }
-            return _context101.a(2);
+            return _context103.a(2);
           case 1:
             if (credential) {
-              _context101.n = 2;
+              _context103.n = 2;
               break;
             }
             unlock();
-            return _context101.a(2);
+            return _context103.a(2);
           case 2:
             epoch = conversationEpoch, profileId = credential.id, controller = new AbortController();
             chatControllers.add(controller);
@@ -2426,9 +2483,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
             }
             if (!voiceTurn) panel("Nyxthea", "".concat(conversationMarkup(), '<div class="msg user">').concat(esc(m), '</div><div class="msg assistant" id="reply">Thinking\u2026</div>'));
             state("thinking", "Thinking");
-            answer = "";
-            _context101.p = 3;
-            _context101.n = 4;
+            answer = "", quietReply = false;
+            _context103.p = 3;
+            _context103.n = 4;
             return api(voiceTurn ? "/api/voice/chat" : "/api/chat", {
               method: "POST",
               timeoutMs: voiceTurn ? 9500 : 12e3,
@@ -2441,13 +2498,14 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               })
             });
           case 4:
-            d = _context101.v;
+            d = _context103.v;
             if (!(epoch !== conversationEpoch || (credential == null ? void 0 : credential.id) !== profileId)) {
-              _context101.n = 5;
+              _context103.n = 5;
               break;
             }
-            return _context101.a(2);
+            return _context103.a(2);
           case 5:
+            quietReply = d.type === "quiet";
             answer = String(d.answer || "").trim();
             if (!voiceTurn && Array.isArray(d.conversation)) conversationHistory = d.conversation;else if (!voiceTurn) {
               conversationHistory.push({
@@ -2458,53 +2516,63 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 text: answer
               });
             }
-            _context101.n = 7;
+            _context103.n = 7;
             break;
           case 6:
-            _context101.p = 6;
-            _t78 = _context101.v;
+            _context103.p = 6;
+            _t80 = _context103.v;
             if (!(epoch !== conversationEpoch || (credential == null ? void 0 : credential.id) !== profileId || controller.signal.aborted)) {
-              _context101.n = 7;
+              _context103.n = 7;
               break;
             }
-            return _context101.a(2);
+            return _context103.a(2);
           case 7:
-            _context101.p = 7;
+            _context103.p = 7;
             chatControllers.delete(controller);
-            return _context101.f(7);
+            return _context103.f(7);
           case 8:
             if (!(epoch !== conversationEpoch || (credential == null ? void 0 : credential.id) !== profileId)) {
-              _context101.n = 9;
+              _context103.n = 9;
               break;
             }
-            return _context101.a(2);
+            return _context103.a(2);
           case 9:
+            if (!quietReply) {
+              _context103.n = 10;
+              break;
+            }
+            reply = $("#reply");
+            if (reply) reply.remove();
+            state("ready", "Quiet mode");
+            NYXHandsFree.pause();
+            return _context103.a(2);
+          case 10:
             if (!answer) answer = "I hit a snag. Ask me that again.";
             if (!voiceTurn) {
-              reply = $("#reply");
-              if (reply) reply.textContent = answer;
+              _reply = $("#reply");
+              if (_reply) _reply.textContent = answer;
             }
             spoken = false;
-            _context101.p = 10;
-            _context101.n = 11;
+            _context103.p = 11;
+            _context103.n = 12;
             return speak(answer);
-          case 11:
-            spoken = _context101.v;
           case 12:
-            _context101.p = 12;
+            spoken = _context103.v;
+          case 13:
+            _context103.p = 13;
             if (!(epoch !== conversationEpoch || (credential == null ? void 0 : credential.id) !== profileId)) {
-              _context101.n = 13;
+              _context103.n = 14;
               break;
             }
-            return _context101.a(2);
-          case 13:
+            return _context103.a(2);
+          case 14:
             if (!spoken) NYXHandsFree.resume();
             if (!NYXVoice.speaking) state(NYXHandsFree.active ? "listening" : "ready", NYXHandsFree.active ? "Listening for Nyx" : "Ready when you are");
-            return _context101.f(12);
-          case 14:
-            return _context101.a(2);
+            return _context103.f(13);
+          case 15:
+            return _context103.a(2);
         }
-      }, _callee101, null, [[10,, 12, 14], [3, 6, 7, 8]]);
+      }, _callee103, null, [[11,, 13, 15], [3, 6, 7, 8]]);
     }));
     return _send.apply(this, arguments);
   }
@@ -2529,6 +2597,13 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       unlock();
       return;
     }
+    if (NYXVoice.speaking) {
+      NYXVoice.stopSpeech();
+      NYXHandsFree.engagedUntil = Date.now() + 12e4;
+      NYXHandsFree.resume();
+      state("ready", "Paused \u2014 your turn");
+      return;
+    }
     if (((_a = NYXExperience.settings) == null ? void 0 : _a.voiceEnabled) === false) {
       state("ready", "Voice is disabled in your profile");
       return;
@@ -2547,41 +2622,41 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _memories.apply(this, arguments);
   }
   function _memories() {
-    _memories = _asyncToGenerator(_regenerator().m(function _callee103() {
-      var d, list, _t80;
-      return _regenerator().w(function (_context103) {
-        while (1) switch (_context103.p = _context103.n) {
+    _memories = _asyncToGenerator(_regenerator().m(function _callee105() {
+      var d, list, _t82;
+      return _regenerator().w(function (_context105) {
+        while (1) switch (_context105.p = _context105.n) {
           case 0:
             if (credential) {
-              _context103.n = 1;
+              _context105.n = 1;
               break;
             }
             unlock();
-            return _context103.a(2);
+            return _context105.a(2);
           case 1:
-            _context103.p = 1;
-            _context103.n = 2;
+            _context105.p = 1;
+            _context105.n = 2;
             return api("/api/memories");
           case 2:
-            d = _context103.v;
+            d = _context105.v;
             list = d.memories.length ? d.memories.map(function (x) {
               return '<div class="item">'.concat(esc(x.text), "</div>");
             }).join("") : '<div class="item">Nothing is saved yet.</div>';
             panel("Your memory", "<p>".concat(esc(d.notice || "Memory remains under your control."), "</p>").concat(list, '<input id="memText" class="field" placeholder="Save something you choose"><button id="saveMem" class="primary">Remember</button>'));
-            $("#saveMem").onclick = _asyncToGenerator(_regenerator().m(function _callee102() {
-              var text, _t79;
-              return _regenerator().w(function (_context102) {
-                while (1) switch (_context102.p = _context102.n) {
+            $("#saveMem").onclick = _asyncToGenerator(_regenerator().m(function _callee104() {
+              var text, _t81;
+              return _regenerator().w(function (_context104) {
+                while (1) switch (_context104.p = _context104.n) {
                   case 0:
                     text = $("#memText").value.trim();
                     if (text) {
-                      _context102.n = 1;
+                      _context104.n = 1;
                       break;
                     }
-                    return _context102.a(2);
+                    return _context104.a(2);
                   case 1:
-                    _context102.p = 1;
-                    _context102.n = 2;
+                    _context104.p = 1;
+                    _context104.n = 2;
                     return api("/api/memories", {
                       method: "POST",
                       body: JSON.stringify({
@@ -2590,28 +2665,28 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                     });
                   case 2:
                     memories();
-                    _context102.n = 4;
+                    _context104.n = 4;
                     break;
                   case 3:
-                    _context102.p = 3;
-                    _t79 = _context102.v;
-                    panel("Your memory", "<p>".concat(esc(_t79.message), '</p><button id="memoryRetry" class="secondary">Back to memories</button>'));
+                    _context104.p = 3;
+                    _t81 = _context104.v;
+                    panel("Your memory", "<p>".concat(esc(_t81.message), '</p><button id="memoryRetry" class="secondary">Back to memories</button>'));
                     $("#memoryRetry").onclick = memories;
                   case 4:
-                    return _context102.a(2);
+                    return _context104.a(2);
                 }
-              }, _callee102, null, [[1, 3]]);
+              }, _callee104, null, [[1, 3]]);
             }));
-            _context103.n = 4;
+            _context105.n = 4;
             break;
           case 3:
-            _context103.p = 3;
-            _t80 = _context103.v;
-            panel("Your memory", "<p>".concat(esc(_t80.message), "</p>"));
+            _context105.p = 3;
+            _t82 = _context105.v;
+            panel("Your memory", "<p>".concat(esc(_t82.message), "</p>"));
           case 4:
-            return _context103.a(2);
+            return _context105.a(2);
         }
-      }, _callee103, null, [[1, 3]]);
+      }, _callee105, null, [[1, 3]]);
     }));
     return _memories.apply(this, arguments);
   }
@@ -2640,22 +2715,22 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _startEmergency.apply(this, arguments);
   }
   function _startEmergency() {
-    _startEmergency = _asyncToGenerator(_regenerator().m(function _callee104() {
-      var _a, status, type, practice, d, _t81;
-      return _regenerator().w(function (_context104) {
-        while (1) switch (_context104.p = _context104.n) {
+    _startEmergency = _asyncToGenerator(_regenerator().m(function _callee106() {
+      var _a, status, type, practice, d, _t83;
+      return _regenerator().w(function (_context106) {
+        while (1) switch (_context106.p = _context106.n) {
           case 0:
             status = $("#emergencyStatus"), type = (_a = $("input[name=emergencyType]:checked")) == null ? void 0 : _a.value, practice = $("#emergencyPractice").checked;
             if (credential) {
-              _context104.n = 1;
+              _context106.n = 1;
               break;
             }
             status.textContent = "Session locked. The 911 call button still works; unlock only if you want to save an incident timeline.";
-            return _context104.a(2);
+            return _context106.a(2);
           case 1:
-            _context104.p = 1;
+            _context106.p = 1;
             status.textContent = "Starting\u2026";
-            _context104.n = 2;
+            _context106.n = 2;
             return api("/api/emergency/incidents", {
               method: "POST",
               body: JSON.stringify({
@@ -2665,18 +2740,18 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               })
             });
           case 2:
-            d = _context104.v;
+            d = _context106.v;
             renderEmergency(d.incident);
-            _context104.n = 4;
+            _context106.n = 4;
             break;
           case 3:
-            _context104.p = 3;
-            _t81 = _context104.v;
-            status.textContent = _t81.message;
+            _context106.p = 3;
+            _t83 = _context106.v;
+            status.textContent = _t83.message;
           case 4:
-            return _context104.a(2);
+            return _context106.a(2);
         }
-      }, _callee104, null, [[1, 3]]);
+      }, _callee106, null, [[1, 3]]);
     }));
     return _startEmergency.apply(this, arguments);
   }
@@ -2752,14 +2827,14 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _markEmergencySafe.apply(this, arguments);
   }
   function _markEmergencySafe() {
-    _markEmergencySafe = _asyncToGenerator(_regenerator().m(function _callee105(incident) {
-      var status, d, _t82;
-      return _regenerator().w(function (_context105) {
-        while (1) switch (_context105.p = _context105.n) {
+    _markEmergencySafe = _asyncToGenerator(_regenerator().m(function _callee107(incident) {
+      var status, d, _t84;
+      return _regenerator().w(function (_context107) {
+        while (1) switch (_context107.p = _context107.n) {
           case 0:
             status = $("#emergencyStatus");
-            _context105.p = 1;
-            _context105.n = 2;
+            _context107.p = 1;
+            _context107.n = 2;
             return api("/api/emergency/incidents/".concat(incident.id, "/mark-safe"), {
               method: "POST",
               body: JSON.stringify({
@@ -2767,19 +2842,19 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               })
             });
           case 2:
-            d = _context105.v;
+            d = _context107.v;
             status.textContent = d.incident.practice ? "Practice complete." : "Marked safe only inside Nyxthea. This did not cancel or update emergency services.";
             $("#markEmergencySafe").disabled = true;
-            _context105.n = 4;
+            _context107.n = 4;
             break;
           case 3:
-            _context105.p = 3;
-            _t82 = _context105.v;
-            status.textContent = _t82.message;
+            _context107.p = 3;
+            _t84 = _context107.v;
+            status.textContent = _t84.message;
           case 4:
-            return _context105.a(2);
+            return _context107.a(2);
         }
-      }, _callee105, null, [[1, 3]]);
+      }, _callee107, null, [[1, 3]]);
     }));
     return _markEmergencySafe.apply(this, arguments);
   }
@@ -2796,31 +2871,31 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _startLiveGuide.apply(this, arguments);
   }
   function _startLiveGuide() {
-    _startLiveGuide = _asyncToGenerator(_regenerator().m(function _callee106() {
-      var objective, source, microphone, confirm, note, sources, token, d, visual, tracks, audio, _t83, _t84;
-      return _regenerator().w(function (_context106) {
-        while (1) switch (_context106.p = _context106.n) {
+    _startLiveGuide = _asyncToGenerator(_regenerator().m(function _callee108() {
+      var objective, source, microphone, confirm2, note, sources, token, d, visual, tracks, audio, _t85, _t86;
+      return _regenerator().w(function (_context108) {
+        while (1) switch (_context108.p = _context108.n) {
           case 0:
-            objective = $("#guideObjective").value.trim(), source = $("input[name=guideSource]:checked").value, microphone = $("#guideMic").checked, confirm = $("#guideConsent").checked, note = $("#guideNote");
+            objective = $("#guideObjective").value.trim(), source = $("input[name=guideSource]:checked").value, microphone = $("#guideMic").checked, confirm2 = $("#guideConsent").checked, note = $("#guideNote");
             if (objective) {
-              _context106.n = 1;
+              _context108.n = 1;
               break;
             }
             note.textContent = "Tell Nyxthea what you are trying to fix.";
-            return _context106.a(2);
+            return _context108.a(2);
           case 1:
-            if (confirm) {
-              _context106.n = 2;
+            if (confirm2) {
+              _context108.n = 2;
               break;
             }
             note.textContent = "Live Guide needs your explicit permission before it can view or listen.";
-            return _context106.a(2);
+            return _context108.a(2);
           case 2:
             guideResumeHandsFree = NYXHandsFree.active;
             if (guideResumeHandsFree) NYXHandsFree.pause();
             sources = [source].concat(_toConsumableArray(microphone ? ["microphone"] : [])), token = ++guideToken;
-            _context106.p = 3;
-            _context106.n = 4;
+            _context108.p = 3;
+            _context108.n = 4;
             return api("/api/live-guide", {
               method: "POST",
               body: JSON.stringify({
@@ -2830,37 +2905,37 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               })
             });
           case 4:
-            d = _context106.v;
+            d = _context108.v;
             if (!(token !== guideToken || document.hidden)) {
-              _context106.n = 5;
+              _context108.n = 5;
               break;
             }
-            return _context106.a(2);
+            return _context108.a(2);
           case 5:
             guideSession = d.session;
             if (!(d.session.status === "safety_hold")) {
-              _context106.n = 6;
+              _context108.n = 6;
               break;
             }
             panel("Live Guide safety stop", '<div class="item risk-stop"><strong>Stop here.</strong><p>'.concat(esc(d.session.safety.message), "</p></div>"));
             guideSession = null;
-            return _context106.a(2);
+            return _context108.a(2);
           case 6:
             if (!(source === "screen")) {
-              _context106.n = 8;
+              _context108.n = 8;
               break;
             }
-            _context106.n = 7;
+            _context108.n = 7;
             return nyxMediaRequest(navigator.mediaDevices.getDisplayMedia({
               video: true,
               audio: false
             }), 9e3, "Screen-share permission timed out.");
           case 7:
-            _t83 = _context106.v;
-            _context106.n = 10;
+            _t85 = _context108.v;
+            _context108.n = 10;
             break;
           case 8:
-            _context106.n = 9;
+            _context108.n = 9;
             return nyxMediaRequest(navigator.mediaDevices.getUserMedia({
               video: {
                 facingMode: {
@@ -2870,40 +2945,40 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               audio: false
             }), 9e3, "Camera permission timed out.");
           case 9:
-            _t83 = _context106.v;
+            _t85 = _context108.v;
           case 10:
-            visual = _t83;
+            visual = _t85;
             tracks = _toConsumableArray(visual.getTracks());
             guidePending = tracks;
             if (!(token !== guideToken || document.hidden)) {
-              _context106.n = 11;
+              _context108.n = 11;
               break;
             }
             tracks.forEach(function (t) {
               return t.stop();
             });
-            return _context106.a(2);
+            return _context108.a(2);
           case 11:
             if (!microphone) {
-              _context106.n = 14;
+              _context108.n = 14;
               break;
             }
-            _context106.n = 12;
+            _context108.n = 12;
             return nyxMediaRequest(navigator.mediaDevices.getUserMedia({
               audio: true,
               video: false
             }), 7e3, "Microphone permission timed out.");
           case 12:
-            audio = _context106.v;
+            audio = _context108.v;
             tracks.push.apply(tracks, _toConsumableArray(audio.getAudioTracks()));
             if (!(token !== guideToken || document.hidden)) {
-              _context106.n = 13;
+              _context108.n = 13;
               break;
             }
             tracks.forEach(function (t) {
               return t.stop();
             });
-            return _context106.a(2);
+            return _context108.a(2);
           case 13:
             startGuideTranscript();
           case 14:
@@ -2915,20 +2990,20 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               };
             });
             renderLiveGuide();
-            _context106.n = 17;
+            _context108.n = 17;
             break;
           case 15:
-            _context106.p = 15;
-            _t84 = _context106.v;
+            _context108.p = 15;
+            _t86 = _context108.v;
             guidePending.forEach(function (t) {
               return t.stop();
             });
             guidePending = [];
             if (!(token !== guideToken)) {
-              _context106.n = 16;
+              _context108.n = 16;
               break;
             }
-            return _context106.a(2);
+            return _context108.a(2);
           case 16:
             if (guideSession) api("/api/live-guide/".concat(guideSession.id), {
               method: "DELETE"
@@ -2942,12 +3017,12 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               guideResumeHandsFree = false;
               NYXHandsFree.resume();
             }
-            panel("Live Guide could not start", "<p>".concat(esc(_t84.message || "Camera, microphone, or screen access was not granted."), '</p><button class="secondary" id="tryGuide">Try again</button>'));
+            panel("Live Guide could not start", "<p>".concat(esc(_t86.message || "Camera, microphone, or screen access was not granted."), '</p><button class="secondary" id="tryGuide">Try again</button>'));
             $("#tryGuide").onclick = guideSetup;
           case 17:
-            return _context106.a(2);
+            return _context108.a(2);
         }
-      }, _callee106, null, [[3, 15]]);
+      }, _callee108, null, [[3, 15]]);
     }));
     return _startLiveGuide.apply(this, arguments);
   }
@@ -3007,22 +3082,22 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _analyzeGuide.apply(this, arguments);
   }
   function _analyzeGuide() {
-    _analyzeGuide = _asyncToGenerator(_regenerator().m(function _callee107() {
-      var _a, out, button, note, d, g, _t85;
-      return _regenerator().w(function (_context107) {
-        while (1) switch (_context107.p = _context107.n) {
+    _analyzeGuide = _asyncToGenerator(_regenerator().m(function _callee109() {
+      var _a, out, button, note, d, g, _t87;
+      return _regenerator().w(function (_context109) {
+        while (1) switch (_context109.p = _context109.n) {
           case 0:
             if (!(guideBusy || !guideSession)) {
-              _context107.n = 1;
+              _context109.n = 1;
               break;
             }
-            return _context107.a(2);
+            return _context109.a(2);
           case 1:
             guideBusy = true;
             out = $("#guideResult"), button = $("#checkGuide"), note = ((_a = $("#guideUserNote")) == null ? void 0 : _a.value.trim()) || "";
             if (button) button.textContent = "Checking\u2026";
-            _context107.p = 2;
-            _context107.n = 3;
+            _context109.p = 2;
+            _context109.n = 3;
             return api("/api/live-guide/".concat(guideSession.id, "/analyze"), {
               method: "POST",
               timeoutMs: 1e4,
@@ -3033,7 +3108,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               })
             });
           case 3:
-            d = _context107.v;
+            d = _context109.v;
             guideTranscript = "";
             guideSession = d.session;
             g = d.guidance;
@@ -3047,21 +3122,21 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               });
               guideStream = null;
             }
-            _context107.n = 5;
+            _context109.n = 5;
             break;
           case 4:
-            _context107.p = 4;
-            _t85 = _context107.v;
-            out.innerHTML = '<div class="item risk-stop"><strong>Live Guide paused</strong><p>'.concat(esc(_t85.message), "</p></div>");
+            _context109.p = 4;
+            _t87 = _context109.v;
+            out.innerHTML = '<div class="item risk-stop"><strong>Live Guide paused</strong><p>'.concat(esc(_t87.message), "</p></div>");
           case 5:
-            _context107.p = 5;
+            _context109.p = 5;
             guideBusy = false;
             if (button) button.textContent = "Check this step";
-            return _context107.f(5);
+            return _context109.f(5);
           case 6:
-            return _context107.a(2);
+            return _context109.a(2);
         }
-      }, _callee107, null, [[2, 4, 5, 6]]);
+      }, _callee109, null, [[2, 4, 5, 6]]);
     }));
     return _analyzeGuide.apply(this, arguments);
   }
@@ -3069,15 +3144,15 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _endLiveGuide.apply(this, arguments);
   }
   function _endLiveGuide() {
-    _endLiveGuide = _asyncToGenerator(_regenerator().m(function _callee108() {
+    _endLiveGuide = _asyncToGenerator(_regenerator().m(function _callee110() {
       var show,
         active,
         resumeWake,
-        _args108 = arguments;
-      return _regenerator().w(function (_context108) {
-        while (1) switch (_context108.n) {
+        _args110 = arguments;
+      return _regenerator().w(function (_context110) {
+        while (1) switch (_context110.n) {
           case 0:
-            show = _args108.length > 0 && _args108[0] !== undefined ? _args108[0] : true;
+            show = _args110.length > 0 && _args110[0] !== undefined ? _args110[0] : true;
             guideToken++;
             guidePending.forEach(function (t) {
               return t.stop();
@@ -3106,9 +3181,9 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
             }, 250);
             if (show) panel("Live Guide ended", "<p>Camera, screen, and microphone access has stopped. Nyxthea did not save the raw media.</p>");
           case 1:
-            return _context108.a(2);
+            return _context110.a(2);
         }
-      }, _callee108);
+      }, _callee110);
     }));
     return _endLiveGuide.apply(this, arguments);
   }
@@ -3290,6 +3365,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     token: 0,
     speechToken: 0,
     speaking: false,
+    pendingSpeechDone: null,
     listening: false,
     transcribing: false,
     audioEl: null,
@@ -3301,15 +3377,19 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
       this.preferred = vs.find(function (v) {
         return /^en[-_]GB/i.test(v.lang) && /kate|martha|serena|female/i.test(v.name);
       }) || vs.find(function (v) {
-        return /samantha|ava|allison|serena|victoria/i.test(v.name);
-      }) || vs.find(function (v) {
         return /^en[-_]GB/i.test(v.lang) && !/daniel|male/i.test(v.name);
+      }) || vs.find(function (v) {
+        return /samantha|ava|allison|serena|victoria/i.test(v.name);
       }) || null;
       return this.preferred;
     },
     stopSpeech() {
       var _a, _b;
       this.speechToken++;
+      var done = this.pendingSpeechDone;
+      this.pendingSpeechDone = null;
+      if (done) done(false);
+      mic.setAttribute("aria-label", "Voice input");
       try {
         (_a = this.synth) == null ? void 0 : _a.cancel();
       } catch (e) {}
@@ -3422,24 +3502,25 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
         var _a;
         var u = new SpeechSynthesisUtterance(String(text));
         u.voice = _this3.choose();
-        u.lang = ((_a = u.voice) == null ? void 0 : _a.lang) || "en-US";
+        u.lang = ((_a = u.voice) == null ? void 0 : _a.lang) || "en-GB";
         u.rate = 0.98;
         u.pitch = 0.94;
         u.volume = 1;
         var settled = false;
         var watchdog = setTimeout(function () {
-          return done(false);
+          return _done(false);
         }, Math.max(9e3, Math.min(3e4, String(text).length * 75)));
         u.onstart = function () {
           if (token !== _this3.speechToken) return;
           _this3.speaking = true;
           document.body.dataset.nyxState = "speaking";
         };
-        var done = function done() {
+        var _done = function done() {
           var value = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : true;
           if (settled) return;
           settled = true;
           clearTimeout(watchdog);
+          if (_this3.pendingSpeechDone === _done) _this3.pendingSpeechDone = null;
           if (token !== _this3.speechToken) {
             resolve(false);
             return;
@@ -3451,23 +3532,24 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
           }, 320);
           resolve(value);
         };
+        _this3.pendingSpeechDone = _done;
         u.onend = function () {
-          return done(true);
+          return _done(true);
         };
         u.onerror = function () {
-          return done(false);
+          return _done(false);
         };
         try {
           _this3.synth.speak(u);
         } catch (e) {
-          done(false);
+          _done(false);
         }
       });
     },
     say(text) {
       var _this4 = this;
       return _asyncToGenerator(_regenerator().m(function _callee10() {
-        var _a, _b, token, controller, fetchTimer, r, contentType, blob, url, audio, result, fallback, _t11;
+        var _a, _b, _c, token, spoken, controller, fetchTimer, r, contentType, blob, url, audio, result, fallback, _t11;
         return _regenerator().w(function (_context10) {
           while (1) switch (_context10.p = _context10.n) {
             case 0:
@@ -3477,7 +3559,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               }
               return _context10.a(2, false);
             case 1:
-              _this4.speechToken++;
+              _this4.stopSpeech();
               token = _this4.speechToken;
               try {
                 (_a = _this4.synth) == null ? void 0 : _a.cancel();
@@ -3492,13 +3574,31 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 _this4.audioUrl = null;
               }
               _this4.speaking = true;
+              mic.setAttribute("aria-label", "Interrupt Nyx");
               document.body.dataset.nyxState = "speaking";
-              _context10.p = 2;
+              if (!((((_c = NYXExperience.settings) == null ? void 0 : _c.voiceOutputMode) || "device") === "device")) {
+                _context10.n = 3;
+                break;
+              }
+              _context10.n = 2;
+              return _this4.fallback(text, token);
+            case 2:
+              spoken = _context10.v;
+              if (!spoken) {
+                _this4.speaking = false;
+                document.body.dataset.nyxState = "idle";
+                setTimeout(function () {
+                  return NYXHandsFree.resume();
+                }, 180);
+              }
+              return _context10.a(2, spoken);
+            case 3:
+              _context10.p = 3;
               controller = new AbortController(), fetchTimer = setTimeout(function () {
                 return controller.abort();
               }, 6500);
-              _context10.p = 3;
-              _context10.n = 4;
+              _context10.p = 4;
+              _context10.n = 5;
               return fetch("/api/voice/speak", {
                 method: "POST",
                 signal: controller.signal,
@@ -3514,43 +3614,43 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                   speaker: "luna"
                 })
               });
-            case 4:
-              r = _context10.v;
             case 5:
-              _context10.p = 5;
-              clearTimeout(fetchTimer);
-              return _context10.f(5);
+              r = _context10.v;
             case 6:
+              _context10.p = 6;
+              clearTimeout(fetchTimer);
+              return _context10.f(6);
+            case 7:
               ;
               if (r.ok) {
-                _context10.n = 7;
-                break;
-              }
-              throw Error("Natural voice unavailable");
-            case 7:
-              contentType = String(r.headers.get("content-type") || "").toLowerCase();
-              if (contentType.startsWith("audio/")) {
                 _context10.n = 8;
                 break;
               }
-              throw Error("Natural voice returned an invalid response");
+              throw Error("Natural voice unavailable");
             case 8:
-              _context10.n = 9;
-              return nyxTimed(r.blob(), 6500, "Voice audio download timed out.");
-            case 9:
-              blob = _context10.v;
-              if (blob.size) {
-                _context10.n = 10;
+              contentType = String(r.headers.get("content-type") || "").toLowerCase();
+              if (contentType.startsWith("audio/")) {
+                _context10.n = 9;
                 break;
               }
-              throw Error("Natural voice returned empty audio");
+              throw Error("Natural voice returned an invalid response");
+            case 9:
+              _context10.n = 10;
+              return nyxTimed(r.blob(), 6500, "Voice audio download timed out.");
             case 10:
-              if (!(token !== _this4.speechToken)) {
+              blob = _context10.v;
+              if (blob.size) {
                 _context10.n = 11;
                 break;
               }
-              return _context10.a(2, false);
+              throw Error("Natural voice returned empty audio");
             case 11:
+              if (!(token !== _this4.speechToken)) {
+                _context10.n = 12;
+                break;
+              }
+              return _context10.a(2, false);
+            case 12:
               url = URL.createObjectURL(blob), audio = _this4.audioEl || new Audio();
               _this4.audioEl = audio;
               _this4.audioUrl = url;
@@ -3558,20 +3658,21 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               audio.preload = "auto";
               audio.muted = false;
               audio.playbackRate = 0.98;
-              _context10.n = 12;
+              _context10.n = 13;
               return new Promise(function () {
                 var _ref1 = _asyncToGenerator(_regenerator().m(function _callee1(resolve) {
-                  var settled, watchdog, finish, _t10;
+                  var settled, watchdog, _finish, _t10;
                   return _regenerator().w(function (_context1) {
                     while (1) switch (_context1.p = _context1.n) {
                       case 0:
                         settled = false, watchdog = setTimeout(function () {
-                          return finish(false);
+                          return _finish(false);
                         }, Math.max(9e3, Math.min(3e4, String(text).length * 70)));
-                        finish = function finish(value) {
+                        _finish = function finish(value) {
                           if (settled) return;
                           settled = true;
                           clearTimeout(watchdog);
+                          if (_this4.pendingSpeechDone === _finish) _this4.pendingSpeechDone = null;
                           if (_this4.audioUrl) {
                             try {
                               URL.revokeObjectURL(_this4.audioUrl);
@@ -3587,11 +3688,12 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                           }
                           resolve(value);
                         };
+                        _this4.pendingSpeechDone = _finish;
                         audio.onended = function () {
-                          return finish(true);
+                          return _finish(true);
                         };
                         audio.onerror = function () {
-                          return finish(false);
+                          return _finish(false);
                         };
                         _context1.p = 1;
                         _context1.n = 2;
@@ -3602,7 +3704,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                       case 3:
                         _context1.p = 3;
                         _t10 = _context1.v;
-                        finish(false);
+                        _finish(false);
                       case 4:
                         return _context1.a(2);
                     }
@@ -3612,44 +3714,44 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                   return _ref1.apply(this, arguments);
                 };
               }());
-            case 12:
+            case 13:
               result = _context10.v;
               if (!result) {
-                _context10.n = 13;
-                break;
-              }
-              return _context10.a(2, true);
-            case 13:
-              if (!(token !== _this4.speechToken)) {
                 _context10.n = 14;
                 break;
               }
-              return _context10.a(2, false);
+              return _context10.a(2, true);
             case 14:
-              _context10.n = 15;
-              return _this4.fallback(text, token);
-            case 15:
-              return _context10.a(2, _context10.v);
-            case 16:
-              _context10.p = 16;
-              _t11 = _context10.v;
               if (!(token !== _this4.speechToken)) {
-                _context10.n = 17;
+                _context10.n = 15;
                 break;
               }
               return _context10.a(2, false);
-            case 17:
-              _this4.speaking = false;
-              _context10.n = 18;
+            case 15:
+              _context10.n = 16;
               return _this4.fallback(text, token);
+            case 16:
+              return _context10.a(2, _context10.v);
+            case 17:
+              _context10.p = 17;
+              _t11 = _context10.v;
+              if (!(token !== _this4.speechToken)) {
+                _context10.n = 18;
+                break;
+              }
+              return _context10.a(2, false);
             case 18:
+              _this4.speaking = false;
+              _context10.n = 19;
+              return _this4.fallback(text, token);
+            case 19:
               fallback = _context10.v;
               if (!fallback) setTimeout(function () {
                 return NYXHandsFree.resume();
               }, 180);
               return _context10.a(2, fallback);
           }
-        }, _callee10, null, [[3,, 5, 6], [2, 16]]);
+        }, _callee10, null, [[4,, 6, 7], [3, 17]]);
       }))();
     },
     toggle(onText) {
@@ -3676,7 +3778,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               token = ++_this5.token;
               _this5.listening = true;
               _this5.show("listening", "Opening microphone\u2026");
-              if (!(((_a = navigator.mediaDevices) == null ? void 0 : _a.getUserMedia) && window.MediaRecorder)) {
+              if (!(!(window.SpeechRecognition || window.webkitSpeechRecognition) && ((_a = navigator.mediaDevices) == null ? void 0 : _a.getUserMedia) && window.MediaRecorder)) {
                 _context12.n = 8;
                 break;
               }
@@ -4324,9 +4426,23 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               _this10.stream = stream;
               _this10.persistentStream = true;
               _this10.label("Listening for Nyx");
-              _context22.n = 3;
-              return _this10.activateWakeMode();
+              if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+                _context22.n = 3;
+                break;
+              }
+              try {
+                stream.getTracks().forEach(function (t) {
+                  return t.stop();
+                });
+              } catch (e) {}
+              _this10.stream = null;
+              _this10.persistentStream = false;
+              _this10.openSpeechFallback();
+              return _context22.a(2);
             case 3:
+              _context22.n = 4;
+              return _this10.activateWakeMode();
+            case 4:
               return _context22.a(2);
           }
         }, _callee22);
@@ -4455,7 +4571,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     resume() {
       var _this12 = this;
       if (!this.active || !this.paused || document.hidden || guideSession) return;
-      if (this.engagedUntil > Date.now()) this.engagedUntil = Date.now() + 45e3;
+      if (this.engagedUntil > Date.now()) this.engagedUntil = Date.now() + 12e4;
       this.paused = false;
       this.label("Listening for Nyx");
       setTimeout(function () {
@@ -4475,12 +4591,19 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               }
               return _context24.a(2);
             case 1:
-              if (!(((_a = navigator.mediaDevices) == null ? void 0 : _a.getUserMedia) && window.MediaRecorder)) {
-                _context24.n = 7;
+              if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+                _context24.n = 2;
                 break;
               }
-              _context24.p = 2;
-              _context24.n = 3;
+              _this13.openSpeechFallback();
+              return _context24.a(2);
+            case 2:
+              if (!(((_a = navigator.mediaDevices) == null ? void 0 : _a.getUserMedia) && window.MediaRecorder)) {
+                _context24.n = 8;
+                break;
+              }
+              _context24.p = 3;
+              _context24.n = 4;
               return nyxMediaRequest(navigator.mediaDevices.getUserMedia({
                 audio: {
                   echoCancellation: true,
@@ -4489,49 +4612,49 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 },
                 video: false
               }), 7e3, "Microphone permission timed out.");
-            case 3:
+            case 4:
               stream = _context24.v;
               if (!(!_this13.active || _this13.paused || document.hidden)) {
-                _context24.n = 4;
+                _context24.n = 5;
                 break;
               }
               stream.getTracks().forEach(function (t) {
                 return t.stop();
               });
               return _context24.a(2);
-            case 4:
+            case 5:
               _this13.stream = stream;
               _this13.persistentStream = true;
               _this13.failures = 0;
-              _context24.n = 5;
+              _context24.n = 6;
               return _this13.activateWakeMode();
-            case 5:
-              return _context24.a(2);
             case 6:
-              _context24.p = 6;
+              return _context24.a(2);
+            case 7:
+              _context24.p = 7;
               _t20 = _context24.v;
               _this13.stream = null;
               _this13.persistentStream = false;
               if (!((_t20 == null ? void 0 : _t20.name) === "NotAllowedError")) {
-                _context24.n = 7;
+                _context24.n = 8;
                 break;
               }
               _this13.label("Microphone permission is needed for Nyx");
               return _context24.a(2);
-            case 7:
+            case 8:
               SR = window.SpeechRecognition || window.webkitSpeechRecognition;
               if (!SR) {
-                _context24.n = 8;
+                _context24.n = 9;
                 break;
               }
               _this13.openSpeechFallback();
               return _context24.a(2);
-            case 8:
-              _this13.label("Wake listening is unavailable in this browser");
             case 9:
+              _this13.label("Wake listening is unavailable in this browser");
+            case 10:
               return _context24.a(2);
           }
-        }, _callee24, null, [[2, 6]]);
+        }, _callee24, null, [[3, 7]]);
       }))();
     },
     recordChunk() {
@@ -4797,7 +4920,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
                 _context26.n = 8;
                 break;
               }
-              _this17.engagedUntil = Date.now() + 45e3;
+              _this17.engagedUntil = Date.now() + 12e4;
               _context26.n = 7;
               return NYXVoice.say("Yeah?");
             case 7:
@@ -4814,7 +4937,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               _this17.resume();
               return _context26.a(2);
             case 10:
-              _this17.engagedUntil = Date.now() + 45e3;
+              _this17.engagedUntil = Date.now() + 12e4;
               _context26.n = 11;
               return send(message, {
                 voiceTurn: true
@@ -4842,28 +4965,28 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _nyxTimed.apply(this, arguments);
   }
   function _nyxTimed() {
-    _nyxTimed = _asyncToGenerator(_regenerator().m(function _callee109(promise, ms, label) {
+    _nyxTimed = _asyncToGenerator(_regenerator().m(function _callee111(promise, ms, label) {
       var timer;
-      return _regenerator().w(function (_context109) {
-        while (1) switch (_context109.p = _context109.n) {
+      return _regenerator().w(function (_context111) {
+        while (1) switch (_context111.p = _context111.n) {
           case 0:
-            _context109.p = 0;
-            _context109.n = 1;
+            _context111.p = 0;
+            _context111.n = 1;
             return Promise.race([Promise.resolve(promise), new Promise(function (_, reject) {
               timer = setTimeout(function () {
                 return reject(new Error(label || "Timed out"));
               }, ms);
             })]);
           case 1:
-            return _context109.a(2, _context109.v);
+            return _context111.a(2, _context111.v);
           case 2:
-            _context109.p = 2;
+            _context111.p = 2;
             clearTimeout(timer);
-            return _context109.f(2);
+            return _context111.f(2);
           case 3:
-            return _context109.a(2);
+            return _context111.a(2);
         }
-      }, _callee109, null, [[0,, 2, 3]]);
+      }, _callee111, null, [[0,, 2, 3]]);
     }));
     return _nyxTimed.apply(this, arguments);
   }
@@ -4871,13 +4994,13 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     return _nyxPrimeFirstRun.apply(this, arguments);
   }
   function _nyxPrimeFirstRun() {
-    _nyxPrimeFirstRun = _asyncToGenerator(_regenerator().m(function _callee110() {
+    _nyxPrimeFirstRun = _asyncToGenerator(_regenerator().m(function _callee112() {
       var _a, microphone, sound, voice, _yield$Promise$all, _yield$Promise$all2, stream;
-      return _regenerator().w(function (_context110) {
-        while (1) switch (_context110.n) {
+      return _regenerator().w(function (_context112) {
+        while (1) switch (_context112.n) {
           case 0:
             if ((_a = navigator.mediaDevices) == null ? void 0 : _a.getUserMedia) {
-              _context110.n = 1;
+              _context112.n = 1;
               break;
             }
             throw new Error("Microphone access is not available in this browser.");
@@ -4898,15 +5021,15 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
             voice = nyxTimed(NYXVoice.prime(), 1800, "Voice startup timed out").catch(function () {
               return false;
             });
-            _context110.n = 2;
+            _context112.n = 2;
             return Promise.all([microphone, sound, voice]);
           case 2:
-            _yield$Promise$all = _context110.v;
+            _yield$Promise$all = _context112.v;
             _yield$Promise$all2 = _slicedToArray(_yield$Promise$all, 1);
             stream = _yield$Promise$all2[0];
-            return _context110.a(2, stream);
+            return _context112.a(2, stream);
         }
-      }, _callee110);
+      }, _callee112);
     }));
     return _nyxPrimeFirstRun.apply(this, arguments);
   }
@@ -5560,7 +5683,7 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
     startVoiceSession() {
       var _this29 = this;
       return _asyncToGenerator(_regenerator().m(function _callee41() {
-        var _a, _b, _c, enrolled, host, card, name, greeting, button, status;
+        var _a, _b, _c, _d, enrolled, host, card, name, addressed, hour, hello, greeting, button, status;
         return _regenerator().w(function (_context41) {
           while (1) switch (_context41.n) {
             case 0:
@@ -5588,8 +5711,10 @@ function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length)
               host = document.getElementById("nyxOnboard"), card = document.getElementById("nyxOnboardCard");
               host.classList.add("show");
               name = ((_b = _this29.settings) == null ? void 0 : _b.pronunciation) || ((_c = _this29.settings) == null ? void 0 : _c.preferredName) || (credential == null ? void 0 : credential.displayName) || "";
-              greeting = name ? "Hey " + name + ". I\u2019m here." : "Hey. I\u2019m here.";
-              card.innerHTML = '<h2>Start NYX</h2><p>Tap once to start voice for this iPhone session.</p><button id="nyxStartSession" class="primary">Start NYX</button><p id="nyxStartSessionStatus" class="small"></p>';
+              addressed = name ? ", " + name : "", hour = (new Date()).getHours();
+              hello = hour < 12 ? "Morning" : hour < 18 ? "Hello" : "Evening";
+              greeting = ((_d = _this29.settings) == null ? void 0 : _d.communicationStyle) === "professional" ? "Welcome back" + addressed + ". What would you like to work on?" : conversationHistory.length ? "There you are" + addressed + ". Where were we?" : hello + addressed + ". I\u2019m here.";
+              card.innerHTML = '<h2>Start NYX</h2><p>Tap once to start voice in this browser session.</p><button id="nyxStartSession" class="primary">Start NYX</button><p id="nyxStartSessionStatus" class="small"></p>';
               button = document.getElementById("nyxStartSession"), status = document.getElementById("nyxStartSessionStatus");
               button.onclick = _asyncToGenerator(_regenerator().m(function _callee40() {
                 var _a2, cue, wakeStream, greetingResult, spoken, _t28;
