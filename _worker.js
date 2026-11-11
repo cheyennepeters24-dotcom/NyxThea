@@ -60,6 +60,11 @@ async function own(request, env, action) {
 }
 function isHouseholdAdmin(profile) { const identity=profileIdentity(profile.id); if(profile.role==="child"||(identity?.birthday&&identity.developmentalStage!=="adult"))return false; const household=householdSummary(profile.id); return Boolean(profile.permissions.includes("household_admin")||household?.createdBy===profile.id||household?.members?.some(member=>member.profileId===profile.id&&member.role==="owner")); }
 function requireAdmin(profile) { if (!isHouseholdAdmin(profile)) throw Object.assign(new Error("Household administrator permission is required."), { status: 403 }); }
+function conversationPreferences(profile) {
+  const identity = profileIdentity(profile.id);
+  const child = profile.role === "child" || Boolean(identity?.birthday && identity.developmentalStage !== "adult");
+  return {communicationStyle:child ? "natural" : experienceSettings(profile.id).communicationStyle, role:child ? "child" : profile.role};
+}
 function requireAdultProfile(profile) {
   const identityRecord=profileIdentity(profile.id);
   const adult=profile.role!=="child"&&(identityRecord?.birthday?identityRecord.developmentalStage==="adult":profile.role==="adult"||profile.role==="owner"||profile.permissions.includes("household_admin"));
@@ -128,7 +133,7 @@ async function api(request, env, url) {
   if (!env.NYXTHEA_STATE && request.method === "POST" && url.pathname === "/api/auth/bootstrap") { enforceRateLimit("bootstrap", { limit: 10, windowMs: 60000 }); const input = await readJson(request); if (!env.NYXTHEA_DEV_BOOTSTRAP_TOKEN || input.token !== env.NYXTHEA_DEV_BOOTSTRAP_TOKEN) return json({ error: "Invalid development bootstrap token." }, 403); const owner = bootstrapOwner(env.NYXTHEA_DEV_BOOTSTRAP_TOKEN); return json({ profile: profileSummary(owner), credential: { profileId: owner.id, token: env.NYXTHEA_DEV_BOOTSTRAP_TOKEN }, notice: "Temporary local-development credential; not production authentication." }); }
   const profile = await own(request, env, `${request.method} ${url.pathname}`); const memory = memoryService("local-user", profile.id, { durable: Boolean(env.NYXTHEA_STATE) });
   if (request.method === "GET" && url.pathname === "/api/experience") return json({ settings: experienceSettings(profile.id), principles: NYXTHEA_PRINCIPLES, rose: rosePresentation("idle") });
-  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); if (profile.role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
+  if (request.method === "POST" && url.pathname === "/api/experience") { const patch = await readJson(request); if (conversationPreferences(profile).role === "child" && patch.communicationStyle === "unfiltered") patch.communicationStyle = "natural"; return json({ settings: updateExperience(profile.id, patch) }); }
   if (request.method === "POST" && url.pathname === "/api/experience/rose") return json({ rose: rosePresentation((await readJson(request)).state) });
   if (request.method === "POST" && url.pathname === "/api/conversation/interpret") return json(interpretTurn(await readJson(request)));
   if (request.method === "POST" && url.pathname === "/api/recovery") return json(recoveryLanguage(await readJson(request)));
@@ -343,7 +348,7 @@ async function api(request, env, url) {
     try{
       const context=buildContext({conversation:recentTurns(speaker.id).slice(-4)});
       const response=await Promise.race([
-        converseFast(env.AI,prompt,context,{communicationStyle:experienceSettings(speaker.id).communicationStyle,role:speaker.role}),
+        converseFast(env.AI,prompt,context,conversationPreferences(speaker)),
         new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error("Voice response timed out."),{status:504})),8000))
       ]);
       if(response.text)recordTurn(speaker.id,"assistant",response.text);
@@ -391,7 +396,7 @@ async function api(request, env, url) {
   if (request.method === "DELETE" && url.pathname === "/api/memories") return json({ deleted: memory.clear(url.searchParams.get("layer") || undefined) });
   if (request.method === "GET" && url.pathname === "/api/conversation/recent") return json({ conversation: recentTurns(profile.id, 24) });
   if (request.method === "POST" && url.pathname === "/api/conversation/state") return json({ state: setConversationState(profile.id, (await readJson(request)).mode) });
-  if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, personality: { communicationStyle: experienceSettings(profile.id).communicationStyle, role: profile.role }, mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
+  if (request.method === "POST" && url.pathname === "/api/chat") { const { message } = await readJson(request); if (typeof message !== "string" || !message.trim() || message.length > 4000) return json({ error: "Message must be 1–4000 characters." }, 400); recordTurn(profile.id, "user", message.trim()); const education = educationGuidance(profile, message); if (!education.allowed) { recordTurn(profile.id, "assistant", education.response); return json({ type: "education_guardrail", answer: education.response, education, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); } const result = await orchestrate({ ai: env.AI, message: message.trim(), memories: memory.retrieve(message), conversation: recentTurns(profile.id), authorization: { action: false }, personality: conversationPreferences(profile), mode: conversationState(profile.id).mode }); if (result.answer) recordTurn(profile.id, "assistant", result.answer); return json({ ...result, memoryNotice: memory.storageNotice, conversation: recentTurns(profile.id) }); }
   return json({ error: "Not found." }, 404);
 }
 

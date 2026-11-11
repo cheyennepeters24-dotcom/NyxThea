@@ -468,7 +468,7 @@ test('saved communication style reaches both authenticated conversation routes',
   const signup=await call('/api/auth/register',{method:'POST',data:{username:'style-routing',displayName:'Style',password:'style-routing-password-123'}});
   const cookie=signup.headers.get('set-cookie').split(';')[0];
   let captured='';const previousAI=env.AI;
-  env.AI={run:async(_model,input)=>{captured=input.prompt;return {response:'Let’s sort it out.'}}};
+  env.AI={run:async(_model,input)=>{captured=JSON.stringify(input.messages);return {response:'Let’s sort it out.'}}};
   try {
     for(const communicationStyle of ['professional','natural','unfiltered']) {
       assert.equal((await call('/api/experience',{method:'POST',cookie,data:{communicationStyle}})).status,200);

@@ -60,7 +60,7 @@ test('voice and text use the same saved personality with distinct style modes', 
   const {converseFast,conversationPersonality}=await import('../core/conversation.js');
   for(const converseMode of [converse,converseFast]) {
     let prompt='';
-    const ai={run:async(_model,input)=>{prompt=input.prompt;return {response:'Let’s sort it out.'}}};
+    const ai={run:async(_model,input)=>{prompt=JSON.stringify(input.messages);return {response:'Let’s sort it out.'}}};
     await converseMode(ai,'Help me organize my afternoon.',{}, {communicationStyle:'natural'});
     assert.match(prompt,/dry humor, playful sarcasm/i);
     await converseMode(ai,'Help me organize my afternoon.',{}, {communicationStyle:'professional'});
@@ -72,4 +72,23 @@ test('voice and text use the same saved personality with distinct style modes', 
   const child=conversationPersonality({communicationStyle:'unfiltered',role:'child'});
   assert.match(child,/age-appropriate/);
   assert.doesNotMatch(child,/Unfiltered mode:/);
+});
+
+test('a timed-out primary model falls back without losing adult personality', async () => {
+  const {converseFast}=await import('../core/conversation.js');
+  for(const fn of [converse,converseFast]){
+    const calls=[];
+    const result=await fn({run:async(model,input)=>{calls.push({model,input});if(calls.length===1)throw Object.assign(Error('timeout'),{status:504});return {choices:[{message:{content:'That coffee has officially betrayed you.'}}]};}},'My coffee is cold.',{conversation:[{role:'assistant',text:"I heard you, but I couldn't finish that reply right now. Please try again in a moment."},{role:'user',text:'My coffee is cold.'}]},{communicationStyle:'unfiltered',role:'adult'});
+    assert.equal(result.fallbackUsed,true);assert.notEqual(calls[0].model,calls[1].model);
+    assert.match(calls[1].input.messages[0].content,/strong swear words/);
+    assert.equal(calls[1].input.messages.filter(x=>x.role==='user').length,1);
+    assert.ok(!JSON.stringify(calls[1].input.messages).includes("couldn't finish"));
+  }
+});
+
+test('child model requests cannot inherit adult language from an unfiltered preference', async()=>{
+  let request;
+  await converse({run:async(_model,input)=>{request=input;return {response:'Let’s figure it out.'}}},'Make a joke.',{}, {communicationStyle:'unfiltered',role:'child'});
+  assert.match(request.messages[0].content,/free of profanity or sexual innuendo/);
+  assert.doesNotMatch(request.messages[0].content,/Adult language is opted in/);
 });
