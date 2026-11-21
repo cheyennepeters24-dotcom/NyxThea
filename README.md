@@ -41,7 +41,7 @@ wrangler.toml                      Worker and asset configuration
 public/index.html                  Luminous Nyxthea visual interface
 src/capabilities/capabilities.js   Honest capability registry
 src/core/                          Conversation, context, routing, research, and orchestration
-src/memory/                        Explicit-memory adapter and scoped memory service
+src/memory/                        Explicit-memory adapter and scoped service
 src/privacy/privacy.js             Privacy primitives and policy summary
 ```
 
