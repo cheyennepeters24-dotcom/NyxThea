@@ -41,7 +41,7 @@ wrangler.toml                      Worker and asset configuration
 public/index.html                  Luminous Nyxthea visual interface
 src/capabilities/capabilities.js   Honest capability registry
 src/core/                          Conversation, context, routing, research, and orchestration
-src/memory/                        Explicit-memory adapter and scoped service
+src/memory/                        Explicit-memory adapter and scoped memory service
 src/privacy/privacy.js             Privacy primitives and policy summary
 ```
 
@@ -50,7 +50,8 @@ src/privacy/privacy.js             Privacy primitives and policy summary
 1. Install and authenticate the Cloudflare Wrangler CLI.
 2. From this directory, run `npx wrangler deploy`.
 3. Deploying `wrangler.toml` provisions the SQLite-backed `NyxtheaState` Durable Object and exposes it as `NYXTHEA_STATE`; no dashboard-created database or copied database ID is required.
-4. Ensure your Cloudflare account has Workers AI access. The Worker uses the `AI` binding declared in `wrangler.toml`; static assets are served from `./public` through `ASSETS`.
+4. Sign-up is closed to strangers: a fresh deployment accepts its very first account and then refuses every later one, so a public sign-up page can never create accounts that spend the household's AI credits. Add people with `POST /api/household/meet` as a household administrator and give each one the one-time household invite code it returns; they redeem it on the sign-in screen with "I have a household invite".
+5. Ensure your Cloudflare account has Workers AI access. The Worker uses the `AI` binding declared in `wrangler.toml`; static assets are served from `./public` through `ASSETS`.
 
 For local development, run `npx wrangler dev` and open the displayed local address.
 
@@ -112,7 +113,7 @@ Hands-free wake requires a per-device five-sample enrollment. During first use (
 
 ## Account sign-in and first run
 
-The published Worker offers username/password accounts with PBKDF2 password hashes, HTTP-only secure session cookies, durable account/session storage, same-origin checks on account changes, and a one-time recovery code that rotates after use. New accounts get only their own ordinary profile; registration never claims the pre-existing owner profile. The preferred name, pronunciation cue, communication style, and first-run completion save to the profile's durable experience settings. Browser speech recognition and synthesis remain dependent on device/browser support and may pronounce names differently despite the stored cue. Keep the recovery code private: there is no email identity verification or email reset provider connected.
+The published Worker offers username/password accounts with PBKDF2 password hashes, HTTP-only secure session cookies, durable account/session storage, same-origin checks on account changes, and a one-time recovery code that rotates after use. New accounts get only their own ordinary profile; registration never claims the pre-existing owner profile. Sign-up closes after the household's first account, so new people join only through the one-time household invite a household administrator creates for their profile. The preferred name, pronunciation cue, communication style, and first-run completion save to the profile's durable experience settings. Browser speech recognition and synthesis remain dependent on device/browser support and may pronounce names differently despite the stored cue. Keep the recovery code private: there is no email identity verification or email reset provider connected.
 
 ## Local-development security model
 
