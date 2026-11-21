@@ -27,7 +27,16 @@ function cookie(request) { const raw = request.headers.get('cookie') || ''; cons
 export const sessionCookie = token => `${cookieName}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=${duration}`;
 export const clearSessionCookie = `${cookieName}=; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=0`;
 async function makeSession(profileId) { const token = random(); sessions().set(await digest(token), { profileId, createdAt: now(), expiresAt: Date.now() + duration * 1000 }); return token; }
+// Public sign-up is closed as soon as the household has an account, so strangers can
+// never create accounts that spend the household's AI credits. The only way in is the
+// one-time household invite an administrator creates for a person's profile, which the
+// sign-in screen's "I have a household invite" form redeems through claimProfileAccount.
+// The very first account stays open so a new deployment can be set up at all.
+function refusePublicSignup() {
+  if (accounts().size) failure('NyxThea is closed to new sign-ups. Ask whoever set up NyxThea for a household invite, then choose "I have a household invite".', 403);
+}
 export async function registerAccount({ username, password, displayName }) {
+  refusePublicSignup();
   const name = validUsername(username); validPassword(password);
   const display = String(displayName || '').trim();
   if (!display || display.length > 80) failure('A display name of 1–80 characters is required.');

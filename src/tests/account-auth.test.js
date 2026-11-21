@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { NyxtheaState } from '../../_worker.js';
 import { resetStateForTests, table } from '../state/store.js';
+import { createProfile } from '../profiles/profiles.js';
 
 class FakeStorage {
   rows = new Map();
@@ -50,11 +51,11 @@ test('household administrator cannot edit a profile from another household', asy
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const first = await call('/api/auth/register', { method: 'POST', data: { username: 'first-owner', displayName: 'First', password: 'first-owner-password-123' } });
   const firstCookie = first.headers.get('set-cookie').split(';')[0];
-  const second = await call('/api/auth/register', { method: 'POST', data: { username: 'second-owner', displayName: 'Second', password: 'second-owner-password-123' } });
-  const secondProfile = (await body(second)).profile;
+  // Sign-up is closed after the first account, so a profile outside this household is seeded directly.
+  const secondProfile = createProfile({ displayName: 'Second' });
   const outsider = await call(`/api/profiles/${secondProfile.id}/person`, { method: 'POST', cookie: firstCookie, data: { role: 'child', preferredName: 'Changed' } });
   assert.equal(outsider.status, 404);
-  assert.equal((await body(await call('/api/person', { cookie: second.headers.get('set-cookie').split(';')[0] }))).person, null);
+  assert.equal(table('person_models').has(secondProfile.id), false);
   const met = await call('/api/household/meet', { method: 'POST', cookie: firstCookie, data: { displayName: 'Family Member' } });
   assert.equal(met.status, 201);
   const memberId = (await body(met)).profile.id;
@@ -424,14 +425,15 @@ test('failed-login limit survives a cold restart and expires after its window', 
 test('recent conversation history is isolated to the signed-in profile', async () => {
   resetStateForTests(); storage.rows.clear(); object = new NyxtheaState({ storage }, env);
   const first = await call('/api/auth/register', { method:'POST', data:{username:'history-one',displayName:'One',password:'history-one-password-123'} });
-  const second = await call('/api/auth/register', { method:'POST', data:{username:'history-two',displayName:'Two',password:'history-two-password-123'} });
-  const firstInfo=await body(first),secondInfo=await body(second);
+  // Sign-up is closed after the first account, so the other person's profile is seeded directly.
+  const secondProfile=createProfile({displayName:'Two'});
+  const firstInfo=await body(first);
   table('conversation_turns').set('turn_first',{id:'turn_first',profileId:firstInfo.profile.id,role:'user',text:'first private turn',at:'2026-01-01T00:00:00.000Z'});
-  table('conversation_turns').set('turn_second',{id:'turn_second',profileId:secondInfo.profile.id,role:'user',text:'second private turn',at:'2026-01-01T00:00:01.000Z'});
+  table('conversation_turns').set('turn_second',{id:'turn_second',profileId:secondProfile.id,role:'user',text:'second private turn',at:'2026-01-01T00:00:01.000Z'});
   const firstHistory=await body(await call('/api/conversation/recent',{cookie:first.headers.get('set-cookie').split(';')[0]}));
-  const secondHistory=await body(await call('/api/conversation/recent',{cookie:second.headers.get('set-cookie').split(';')[0]}));
   assert.deepEqual(firstHistory.conversation.map(turn=>turn.text),['first private turn']);
-  assert.deepEqual(secondHistory.conversation.map(turn=>turn.text),['second private turn']);
+  assert.equal((await call('/api/conversation/recent')).status,401);
+  assert.equal(table('conversation_turns').get('turn_second').profileId,secondProfile.id);
 });
 
 test('browser security policy permits blob-backed natural voice audio', async () => {
