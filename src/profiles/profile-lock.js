@@ -6,9 +6,13 @@ const challenges=()=>table("profile_lock_challenges");
 const encoder=new TextEncoder();
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const hex=bytes=>[...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,"0")).join("");
+// Cloudflare Workers caps PBKDF2 at 100,000 iterations in production and throws
+// NotSupportedError above it; local workerd does not enforce the cap, so this value
+// is covered by src/tests/profile-lock.test.js instead of relying on runtime failure.
+export const PIN_PBKDF2_ITERATIONS=100000;
 async function derive(pin,salt){
   const key=await crypto.subtle.importKey("raw",encoder.encode(pin),"PBKDF2",false,["deriveBits"]);
-  return hex(await crypto.subtle.deriveBits({name:"PBKDF2",salt:encoder.encode(salt),iterations:120000,hash:"SHA-256"},key,256));
+  return hex(await crypto.subtle.deriveBits({name:"PBKDF2",salt:encoder.encode(salt),iterations:PIN_PBKDF2_ITERATIONS,hash:"SHA-256"},key,256));
 }
 const random=()=>`${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g,"")}`;
 const b64url=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
